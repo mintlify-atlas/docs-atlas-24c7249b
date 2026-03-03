@@ -1,0 +1,97 @@
+{
+  "projectType": "frontend",
+  "projectName": "ZeroDash",
+  "projectDescription": "A lightweight, fully static homelab dashboard for fast navigation to services and applications with visual monitoring.",
+  "theme": "palm",
+  "primaryColor": "#4A90E2",
+  "lightColor": "#6BA5E8",
+  "darkColor": "#2E5F8F",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/overview",
+              "configuration/layouts",
+              "configuration/tiles"
+            ]
+          },
+          {
+            "group": "Tile Types",
+            "pages": [
+              "tiles/application",
+              "tiles/link",
+              "tiles/button",
+              "tiles/toggle",
+              "tiles/webhook",
+              "tiles/widget"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/search",
+              "features/availability-monitoring",
+              "features/responsive-layouts",
+              "features/text-fitting"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/media-queries",
+              "advanced/layout-urls",
+              "advanced/developer-overlay",
+              "advanced/deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Modules",
+            "pages": [
+              "api/tile-factory",
+              "api/tile-types",
+              "api/layout-selector",
+              "api/renderer",
+              "api/search-engine"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Static deployment without backend or database",
+    "Multiple responsive layouts with media query support",
+    "Six tile types for different use cases",
+    "Global command-palette search with prefix shortcuts",
+    "Real-time service availability monitoring",
+    "Dynamic text fitting for responsive design",
+    "URL-based layout switching"
+  ],
+  "publicApiSurface": [
+    "TileFactory.create(tileConfig)",
+    "TileFactory.createAll(tileConfigs, container)",
+    "selectLayout(layouts)",
+    "renderLayout(selectedLayout, container)",
+    "SearchEngine.constructor(dashboardConfig, searchConfig)",
+    "fitAllLabels(container)",
+    "createDevOverlay(layouts, currentLayoutName)",
+    "updateDevOverlay(devOverlay, layoutName)"
+  ]
+}
