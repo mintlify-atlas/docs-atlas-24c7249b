@@ -1,0 +1,418 @@
+---
+title: SearchEngine
+description: Global command palette search for finding and executing dashboard tiles
+---
+
+The `SearchEngine` class provides a command palette interface for searching and executing tiles across all layouts. It implements a keyboard-driven search overlay with prefix filtering, fuzzy matching, and action execution.
+
+## Class Constructor
+
+```javascript
+const searchEngine = new SearchEngine(dashboardConfig, searchConfig)
+```
+
+<ParamField path="dashboardConfig" type="object" required>
+  The complete dashboard configuration object
+  
+  <ParamField path="dashboardConfig.layouts" type="array" required>
+    Array of layout objects. Each layout's tiles will be indexed for search.
+  </ParamField>
+</ParamField>
+
+<ParamField path="searchConfig" type="object">
+  Optional configuration for search behavior
+  
+  <ParamField path="searchConfig.prefixes" type="object">
+    Custom prefix mappings that override defaults. Keys are single characters, values are arrays of tile types.
+    
+    Example:
+    ```javascript
+    {
+      '@': ['application'],
+      '#': ['link'],
+      '/': ['button']
+    }
+    ```
+  </ParamField>
+</ParamField>
+
+## State Machine
+
+The SearchEngine operates as a state machine with five states:
+
+| State | Description |
+|-------|-------------|
+| `IDLE` | No overlay visible, waiting for trigger key |
+| `OPENING` | Overlay being created, input being focused |
+| `ACTIVE` | User typing, results updating, keyboard nav active |
+| `EXECUTING` | Result chosen, action being performed |
+| `DISMISSING` | Overlay being removed, state being reset |
+
+## Default Prefix Configuration
+
+The following prefixes filter search results by tile type:
+
+| Prefix | Tile Types | Example Query |
+|--------|------------|---------------|
+| `@` | application | `@slack` finds application tiles |
+| `#` | application, link | `#github` finds apps and links |
+| `/` | button | `/deploy` finds button tiles |
+| `.` | toggle | `.feature` finds toggle tiles |
+
+## Methods
+
+### init()
+
+Initializes the global keyboard listener to trigger search.
+
+```javascript
+searchEngine.init();
+```
+
+**Behavior:**
+- Attaches a global `keydown` event listener
+- Any printable key opens the search overlay (when not focused in an input)
+- Logs the number of indexed items to the console
+
+---
+
+### destroy()
+
+Cleans up all event listeners and DOM elements.
+
+```javascript
+searchEngine.destroy();
+```
+
+**Behavior:**
+- Removes the global keyboard listener
+- Closes the search overlay if open
+- Should be called when unmounting the dashboard
+
+---
+
+### buildSearchIndex()
+
+Builds the search index from all layouts in the dashboard configuration.
+
+```javascript
+searchEngine.buildSearchIndex();
+```
+
+**Automatically called by constructor.** Manually calling is only needed if the dashboard configuration changes at runtime.
+
+**Indexing rules:**
+- Only indexes tiles with valid `label` properties
+- Excludes widget tiles (not searchable)
+- Includes: `application`, `link`, `button`, `toggle` tiles
+- Deduplicates tiles with identical labels and types
+
+---
+
+### openSearch()
+
+Opens the search overlay with an initial character.
+
+```javascript
+searchEngine.openSearch(firstChar);
+```
+
+<ParamField path="firstChar" type="string" required>
+  The first character to populate the search input with
+</ParamField>
+
+**Behavior:**
+- Creates the search overlay UI
+- Sets the search input value to `firstChar`
+- Updates results based on the initial query
+- Focuses the input field
+- Transitions state from `IDLE` to `ACTIVE`
+
+---
+
+### closeSearch()
+
+Closes the search overlay and resets state.
+
+```javascript
+searchEngine.closeSearch();
+```
+
+**Behavior:**
+- Removes all search-specific event listeners
+- Removes overlay from DOM
+- Resets query, results, and selected index
+- Transitions state to `IDLE`
+
+---
+
+### executeSelected()
+
+Executes the currently selected search result.
+
+```javascript
+searchEngine.executeSelected();
+```
+
+**Behavior by tile type:**
+
+| Tile Type | Action |
+|-----------|--------|
+| `application` | Opens URL in current or new window based on `target` config |
+| `link` | Opens URL in current or new window based on `target` config |
+| `button` | Sends HTTP request (GET or POST) to configured URL |
+| `toggle` | Fetches current state, sends request to toggle URL |
+
+**Error handling:**
+- Logs errors to console
+- Closes search overlay even if execution fails
+
+---
+
+### executeButtonAction()
+
+Executes a button tile's HTTP request.
+
+```javascript
+await searchEngine.executeButtonAction(config);
+```
+
+<ParamField path="config" type="object" required>
+  The button tile configuration
+  
+  <ParamField path="config.url" type="string" required>
+    The URL to send the request to
+  </ParamField>
+  
+  <ParamField path="config.method" type="string">
+    HTTP method (default: `'GET'`)
+  </ParamField>
+  
+  <ParamField path="config.payload" type="object">
+    JSON payload for POST requests
+  </ParamField>
+</ParamField>
+
+**Returns:** Promise that resolves when the request completes
+
+---
+
+### executeToggleAction()
+
+Executes a toggle tile's state change.
+
+```javascript
+await searchEngine.executeToggleAction(config);
+```
+
+<ParamField path="config" type="object" required>
+  The toggle tile configuration
+  
+  <ParamField path="config.statusCheckUrl" type="string" required>
+    URL to fetch the current state
+  </ParamField>
+  
+  <ParamField path="config.targetUrl" type="object" required>
+    Object containing `trueUrl` and `falseUrl` properties
+  </ParamField>
+  
+  <ParamField path="config.method" type="string">
+    HTTP method (default: `'GET'`)
+  </ParamField>
+  
+  <ParamField path="config.payload" type="object">
+    JSON payload for POST requests
+  </ParamField>
+</ParamField>
+
+**Behavior:**
+1. Fetches current state from `statusCheckUrl`
+2. Parses response (supports boolean, object with `status`/`value`/`state`, or text)
+3. Sends request to opposite state URL (`trueUrl` or `falseUrl`)
+
+**Returns:** Promise that resolves when the toggle completes
+
+---
+
+### selectNext()
+
+Moves selection to the next search result.
+
+```javascript
+searchEngine.selectNext();
+```
+
+**Keyboard shortcut:** `ArrowDown`
+
+---
+
+### selectPrevious()
+
+Moves selection to the previous search result.
+
+```javascript
+searchEngine.selectPrevious();
+```
+
+**Keyboard shortcut:** `ArrowUp`
+
+## Search Algorithm
+
+### Query Parsing
+
+Queries are parsed to extract prefixes and search terms:
+
+```javascript
+// Query: "@slack"
+// Parsed: { prefix: '@', searchTerm: 'slack' }
+
+// Query: "deploy"
+// Parsed: { prefix: null, searchTerm: 'deploy' }
+```
+
+### Normalization
+
+Search terms and labels are normalized for matching:
+
+```javascript
+normalize(str)
+// - Converts to lowercase
+// - Removes spaces
+// - Removes punctuation
+
+normalize("GitHub Repository") // "githubrepository"
+```
+
+### Filtering
+
+1. **Prefix filtering:** If a prefix is present, only tiles of matching types are searched
+2. **Substring matching:** Normalized labels must contain the normalized search term
+3. **Deduplication:** Results with identical `label + type` combinations are removed
+
+### Sorting
+
+Results are sorted by:
+
+1. **Type priority:** `application` > `link` > `button` > `toggle`
+2. **Alphabetical:** Within each type, sorted by label
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Any printable key | Opens search (when not in input) |
+| `Escape` | Closes search |
+| `ArrowDown` | Select next result |
+| `ArrowUp` | Select previous result |
+| `Enter` | Execute selected result |
+
+## Helper Function
+
+### initSearch()
+
+Convenience function to create and initialize a SearchEngine.
+
+```javascript
+import { initSearch } from './core/search.js';
+
+const searchEngine = initSearch(dashboardConfig, searchConfig);
+```
+
+Equivalent to:
+
+```javascript
+const searchEngine = new SearchEngine(dashboardConfig, searchConfig);
+searchEngine.init();
+return searchEngine;
+```
+
+## Example Usage
+
+### Basic Initialization
+
+```javascript
+import { initSearch } from './core/search.js';
+
+const dashboardConfig = {
+  layouts: [
+    {
+      name: 'default',
+      rows: 4,
+      columns: 6,
+      tiles: [
+        {
+          type: 'application',
+          config: {
+            label: 'Slack',
+            url: 'https://slack.com',
+            image: '/icons/slack.png'
+          }
+        },
+        {
+          type: 'button',
+          config: {
+            label: 'Deploy Production',
+            url: 'https://api.example.com/deploy',
+            method: 'POST'
+          }
+        }
+      ]
+    }
+  ]
+};
+
+const search = initSearch(dashboardConfig);
+// User can now press any key to open search
+```
+
+### Custom Prefix Configuration
+
+```javascript
+const searchConfig = {
+  prefixes: {
+    '>': ['button'],           // Override default '/'
+    '*': ['toggle'],           // Override default '.'
+    '@': ['application'],      // Keep default '@'
+    '!': ['link', 'application'] // New custom prefix
+  }
+};
+
+const search = initSearch(dashboardConfig, searchConfig);
+```
+
+### Manual Control
+
+```javascript
+const search = new SearchEngine(dashboardConfig);
+
+// Initialize when ready
+search.init();
+
+// Cleanup when unmounting
+window.addEventListener('beforeunload', () => {
+  search.destroy();
+});
+```
+
+## Validation
+
+### Prefix Validation
+
+Invalid prefixes are automatically removed:
+
+```javascript
+// Invalid: types not an array
+{ '@': 'application' } // Removed with warning
+
+// Invalid: unknown tile type
+{ '@': ['application', 'invalid'] } // Warning logged for 'invalid'
+
+// Valid
+{ '@': ['application', 'link'] } // OK
+```
+
+**Allowed tile types:** `application`, `link`, `button`, `toggle`, `widget`
+
+## Source Reference
+
+**File:** `source/core/search.js:12-792`

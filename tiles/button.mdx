@@ -1,0 +1,128 @@
+---
+title: "Button Tile"
+description: "Trigger HTTP requests with visual feedback"
+---
+
+The Button tile type creates interactive buttons that send HTTP requests when clicked. Buttons provide visual feedback on successful requests and support both GET and POST methods.
+
+## Configuration
+
+Button tiles support the following configuration options:
+
+<ParamField path="label" type="string" required>
+  The text label displayed on the button.
+  
+  ```json
+  "label": "Deploy to Production"
+  ```
+</ParamField>
+
+<ParamField path="url" type="string" required>
+  The endpoint URL to send the HTTP request to when the button is clicked.
+  
+  ```json
+  "url": "https://api.company.com/deploy"
+  ```
+</ParamField>
+
+<ParamField path="method" type="string" required>
+  The HTTP method to use for the request. Must be one of:
+  - `"GET"` - Simple GET request
+  - `"POST"` - POST request (can include payload)
+  
+  ```json
+  "method": "POST"
+  ```
+</ParamField>
+
+<ParamField path="image" type="string">
+  Optional icon image displayed above the button label. The image will be scaled to fit within the tile.
+  
+  ```json
+  "image": "./icons/deploy.svg"
+  ```
+</ParamField>
+
+<ParamField path="payload" type="object">
+  Optional JSON payload to send with POST requests. Must be an object (not an array). The payload will be JSON-stringified and sent with `Content-Type: application/json`.
+  
+  ```json
+  "payload": {
+    "environment": "production",
+    "branch": "main"
+  }
+  ```
+</ParamField>
+
+## Visual Feedback
+
+Button tiles provide tactile feedback on successful requests:
+
+- **Click Animation**: The button scales down to 95% briefly, then returns to normal size
+- **Animation Duration**: 200ms transition
+- **Trigger**: Only animates when the HTTP response is successful (status 2xx)
+
+## Example Configurations
+
+### Simple GET Button
+
+```json
+{
+  "type": "button",
+  "layout": {
+    "x": 0,
+    "y": 2,
+    "width": 1,
+    "height": 1
+  },
+  "config": {
+    "label": "Restart Service",
+    "url": "https://api.company.com/service/restart",
+    "method": "GET",
+    "image": "./icons/restart.png"
+  }
+}
+```
+
+### POST Button with Payload
+
+```json
+{
+  "type": "button",
+  "layout": {
+    "x": 1,
+    "y": 2,
+    "width": 2,
+    "height": 1
+  },
+  "config": {
+    "label": "Deploy to Staging",
+    "url": "https://api.company.com/deploy",
+    "method": "POST",
+    "image": "./icons/deploy.svg",
+    "payload": {
+      "environment": "staging",
+      "branch": "develop",
+      "notify": true
+    }
+  }
+}
+```
+
+## Validation Rules
+
+The ButtonTile class enforces these validation rules:
+
+- `label` must be a non-empty string
+- `url` must be a non-empty string
+- `method` must be either `"GET"` or `"POST"` (required, no default)
+- `image` must be a string if provided
+- `payload` must be a plain object if provided (arrays are not allowed)
+- No unknown configuration keys are allowed
+
+## Request Handling
+
+- POST requests with payload automatically set `Content-Type: application/json`
+- GET requests ignore the `payload` field if provided
+- Failed requests are logged to the console but don't show user-facing errors
+- No loading state or disabled state during request processing

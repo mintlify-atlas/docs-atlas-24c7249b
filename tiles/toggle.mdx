@@ -1,0 +1,230 @@
+---
+title: "Toggle Tile"
+description: "Create stateful toggles with synchronized state across tagged instances"
+---
+
+The Toggle tile type creates interactive switches that maintain state and trigger actions when toggled. Toggles fetch their current state from a status endpoint and can synchronize with other toggles using tags.
+
+## Configuration
+
+Toggle tiles support the following configuration options:
+
+<ParamField path="label" type="string" required>
+  The label for the toggle. Used for identification and optionally displayed on the tile.
+  
+  ```json
+  "label": "VPN Connection"
+  ```
+</ParamField>
+
+<ParamField path="displayLabel" type="boolean" required>
+  Whether to show the label text on the tile. When `true`, the label appears below the toggle image.
+  
+  ```json
+  "displayLabel": true
+  ```
+</ParamField>
+
+<ParamField path="method" type="string" required>
+  The HTTP method to use when toggling state. Must be one of:
+  - `"GET"` - Simple GET request
+  - `"POST"` - POST request (can include payload)
+  
+  ```json
+  "method": "POST"
+  ```
+</ParamField>
+
+<ParamField path="statusCheckUrl" type="string" required>
+  URL endpoint that returns the current toggle state. The endpoint must return a boolean value or an object containing `status`, `value`, or `state` properties.
+  
+  The response can be:
+  - JSON boolean: `true` or `false`
+  - JSON object: `{"status": true}`, `{"value": true}`, or `{"state": true}`
+  - Plain text: `"true"`, `"false"`, `"1"`, or `"0"`
+  
+  ```json
+  "statusCheckUrl": "https://api.company.com/vpn/status"
+  ```
+</ParamField>
+
+<ParamField path="targetUrl" type="object" required>
+  Object defining the URLs and images for both toggle states. All four properties are required.
+  
+  <ParamField path="targetUrl.trueUrl" type="string" required>
+    URL to call when toggling from false to true.
+    
+    ```json
+    "trueUrl": "https://api.company.com/vpn/connect"
+    ```
+  </ParamField>
+  
+  <ParamField path="targetUrl.falseUrl" type="string" required>
+    URL to call when toggling from true to false.
+    
+    ```json
+    "falseUrl": "https://api.company.com/vpn/disconnect"
+    ```
+  </ParamField>
+  
+  <ParamField path="targetUrl.trueImage" type="string" required>
+    Image to display when the toggle state is true.
+    
+    ```json
+    "trueImage": "./icons/vpn-on.png"
+    ```
+  </ParamField>
+  
+  <ParamField path="targetUrl.falseImage" type="string" required>
+    Image to display when the toggle state is false.
+    
+    ```json
+    "falseImage": "./icons/vpn-off.png"
+    ```
+  </ParamField>
+</ParamField>
+
+<ParamField path="payload" type="object">
+  Optional JSON payload to send with POST requests. Must be a plain object.
+  
+  ```json
+  "payload": {
+    "user": "admin",
+    "timeout": 3600
+  }
+  ```
+</ParamField>
+
+<ParamField path="tag" type="string">
+  Optional tag for grouping toggles. When a toggle with a tag is switched, all other toggles with the same tag automatically refresh their state. Use this to keep related toggles synchronized.
+  
+  Empty strings are ignored. Only non-empty string tags enable synchronization.
+  
+  ```json
+  "tag": "network-services"
+  ```
+</ParamField>
+
+## State Management
+
+Toggle tiles implement sophisticated state management:
+
+### Initial State Loading
+
+- The toggle fetches its state from `statusCheckUrl` immediately on render
+- The appropriate image (`trueImage` or `falseImage`) is displayed based on the response
+- Error messages are shown if the status check fails
+
+### Toggle Behavior
+
+1. User clicks the toggle
+2. The appropriate URL is called (`trueUrl` if currently false, `falseUrl` if currently true)
+3. After the toggle request completes, the status is re-fetched from `statusCheckUrl`
+4. The image updates based on the new state
+5. If the toggle has a tag, all other toggles with the same tag also refresh their state
+
+### Tag Synchronization
+
+Toggles with the same non-empty `tag` are automatically synchronized:
+
+- When any tagged toggle is switched, all other toggles with that tag refresh their state
+- This ensures UI consistency when multiple toggles monitor related services
+- Empty tags or missing tags disable synchronization
+- Synchronization errors are isolated and logged to prevent cascading failures
+
+## Example Configurations
+
+### Basic Toggle
+
+```json
+{
+  "type": "toggle",
+  "layout": {
+    "x": 0,
+    "y": 3,
+    "width": 1,
+    "height": 1
+  },
+  "config": {
+    "label": "Dark Mode",
+    "displayLabel": true,
+    "method": "POST",
+    "statusCheckUrl": "https://api.company.com/settings/darkmode",
+    "targetUrl": {
+      "trueUrl": "https://api.company.com/settings/darkmode/enable",
+      "falseUrl": "https://api.company.com/settings/darkmode/disable",
+      "trueImage": "./icons/dark-on.png",
+      "falseImage": "./icons/dark-off.png"
+    }
+  }
+}
+```
+
+### Synchronized Toggles
+
+```json
+[
+  {
+    "type": "toggle",
+    "layout": { "x": 0, "y": 0, "width": 1, "height": 1 },
+    "config": {
+      "label": "Web Server",
+      "displayLabel": true,
+      "method": "POST",
+      "statusCheckUrl": "https://api.company.com/services/web/status",
+      "targetUrl": {
+        "trueUrl": "https://api.company.com/services/web/start",
+        "falseUrl": "https://api.company.com/services/web/stop",
+        "trueImage": "./icons/server-on.png",
+        "falseImage": "./icons/server-off.png"
+      },
+      "tag": "production-services"
+    }
+  },
+  {
+    "type": "toggle",
+    "layout": { "x": 1, "y": 0, "width": 1, "height": 1 },
+    "config": {
+      "label": "Database",
+      "displayLabel": true,
+      "method": "POST",
+      "statusCheckUrl": "https://api.company.com/services/db/status",
+      "targetUrl": {
+        "trueUrl": "https://api.company.com/services/db/start",
+        "falseUrl": "https://api.company.com/services/db/stop",
+        "trueImage": "./icons/db-on.png",
+        "falseImage": "./icons/db-off.png"
+      },
+      "tag": "production-services"
+    }
+  }
+]
+```
+
+In this example, toggling either service will cause both tiles to refresh their status, keeping them synchronized.
+
+## Validation Rules
+
+The ToggleTile class enforces these validation rules:
+
+- `label` must be a non-empty string
+- `displayLabel` must be a boolean (required, no default)
+- `method` must be either `"GET"` or `"POST"` (required, no default)
+- `statusCheckUrl` must be a non-empty string
+- `targetUrl` must be an object with all four required properties:
+  - `trueUrl` must be a non-empty string
+  - `falseUrl` must be a non-empty string
+  - `trueImage` must be a non-empty string
+  - `falseImage` must be a non-empty string
+- `payload` must be a plain object if provided (arrays not allowed)
+- `tag` must be a string if provided (can be null or undefined)
+- No unknown configuration keys are allowed in the main config or `targetUrl` object
+
+## Error Handling
+
+Toggle tiles display error messages when status checks fail:
+
+- Errors appear in small red text on the tile
+- Error messages show the specific failure reason
+- The toggle image is preserved during errors
+- Errors clear automatically when the next successful status check occurs

@@ -1,0 +1,201 @@
+---
+title: Media Queries
+description: Configure responsive layouts using CSS media queries to adapt your dashboard to different screen sizes and devices
+---
+
+ZeroDash supports responsive layouts through CSS media queries, allowing you to define different dashboard configurations for various screen sizes, orientations, and device types.
+
+## How Media Queries Work
+
+The layout selector evaluates media queries in order and selects the first matching layout. If no media query matches, it falls back to the first layout without a `mediaQuery` property.
+
+### Selection Priority
+
+Layouts are evaluated in this order:
+
+1. **URL Override** (highest priority) - See [Layout URLs](/advanced/layout-urls)
+2. **Media Query Matching** - First layout with a matching media query
+3. **Fallback Layout** - First layout without a media query
+4. **Error** - If no layout can be resolved
+
+## Configuration
+
+Define media queries in your layout configuration:
+
+```javascript
+export const dashboardConfig = {
+  layouts: [
+    {
+      name: "mobile",
+      mediaQuery: "(max-width: 768px)",
+      rows: 4,
+      columns: 2,
+      tiles: [
+        // Mobile-optimized tiles
+      ]
+    },
+    {
+      name: "tablet",
+      mediaQuery: "(min-width: 769px) and (max-width: 1024px)",
+      rows: 3,
+      columns: 3,
+      tiles: [
+        // Tablet-optimized tiles
+      ]
+    },
+    {
+      name: "desktop",
+      // No mediaQuery = fallback for larger screens
+      rows: 3,
+      columns: 4,
+      tiles: [
+        // Desktop tiles
+      ]
+    }
+  ]
+};
+```
+
+## Common Media Query Patterns
+
+### Screen Width
+
+Target specific screen widths:
+
+```javascript
+// Small phones
+mediaQuery: "(max-width: 480px)"
+
+// Tablets and small laptops
+mediaQuery: "(min-width: 481px) and (max-width: 1024px)"
+
+// Desktop
+mediaQuery: "(min-width: 1025px)"
+```
+
+### Orientation
+
+Adapt to device orientation:
+
+```javascript
+// Portrait mode
+mediaQuery: "(orientation: portrait)"
+
+// Landscape mode
+mediaQuery: "(orientation: landscape)"
+
+// Landscape on tablets
+mediaQuery: "(min-width: 768px) and (max-width: 1024px) and (orientation: landscape)"
+```
+
+### High-DPI Displays
+
+Target retina and high-density displays:
+
+```javascript
+mediaQuery: "(min-resolution: 2dppx)"
+// or
+mediaQuery: "(-webkit-min-device-pixel-ratio: 2)"
+```
+
+### Dark Mode
+
+Create dark mode layouts:
+
+```javascript
+mediaQuery: "(prefers-color-scheme: dark)"
+```
+
+### Combined Queries
+
+Combine multiple conditions:
+
+```javascript
+// Large landscape screens
+mediaQuery: "(min-width: 1920px) and (orientation: landscape)"
+
+// Tablet portrait or phone
+mediaQuery: "(max-width: 1024px) and (orientation: portrait)"
+```
+
+## Dynamic Layout Switching
+
+ZeroDash automatically monitors media query changes and switches layouts when conditions change, such as:
+
+- Window resizing
+- Device rotation
+- Browser zoom changes
+
+### Resize Debouncing
+
+Layout re-evaluation is debounced by 250ms to prevent excessive re-renders during window resizing. This ensures smooth performance while maintaining responsiveness.
+
+**Note:** URL overrides disable automatic layout switching to preserve the explicitly selected layout.
+
+## Media Query Validation
+
+Invalid media queries are caught and logged as warnings:
+
+```javascript
+// source/core/layoutSelector.js:26-33
+if (window.matchMedia(layout.mediaQuery).matches) {
+  return layout;
+}
+```
+
+If a media query is malformed, ZeroDash will:
+1. Log a warning to the console
+2. Continue evaluating remaining layouts
+3. Fall back to the default layout if needed
+
+## Best Practices
+
+### Order Matters
+
+List layouts from most specific to least specific:
+
+```javascript
+layouts: [
+  { name: "mobile", mediaQuery: "(max-width: 768px)", ... },
+  { name: "tablet", mediaQuery: "(max-width: 1024px)", ... },
+  { name: "desktop" } // Fallback, no mediaQuery
+]
+```
+
+### Always Provide a Fallback
+
+Include at least one layout without a `mediaQuery` as a catch-all:
+
+```javascript
+layouts: [
+  { name: "mobile", mediaQuery: "(max-width: 768px)", ... },
+  { name: "default" } // No mediaQuery = always matches
+]
+```
+
+### Test Across Breakpoints
+
+Use browser DevTools to test different screen sizes:
+
+1. Open DevTools (F12)
+2. Enable device toolbar (Ctrl+Shift+M / Cmd+Shift+M)
+3. Test various device presets
+4. Monitor the [Developer Overlay](/advanced/developer-overlay) to see which layout is active
+
+### Unique Layout Names
+
+All layouts must have unique names. Duplicate names will throw an error:
+
+```javascript
+// ❌ Error: Layout names must be unique
+layouts: [
+  { name: "main", ... },
+  { name: "main", ... } // Duplicate!
+]
+```
+
+## Related
+
+- [Layout URLs](/advanced/layout-urls) - Override layouts via URL
+- [Developer Overlay](/advanced/developer-overlay) - Test and debug layouts
+- [Layouts](/configuration/layouts) - Layout configuration reference

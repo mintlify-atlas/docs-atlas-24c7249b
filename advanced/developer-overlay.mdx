@@ -1,0 +1,333 @@
+---
+title: Developer Overlay
+description: Interactive development tool that displays screen size, active layout, and provides quick layout switching via context menu
+---
+
+The Developer Overlay is a built-in debugging tool that displays real-time information about your dashboard's viewport and active layout. It's automatically enabled during development and provides quick access to layout switching.
+
+## Features
+
+The overlay displays:
+
+- **Screen dimensions** - Current viewport width × height in pixels
+- **Active layout** - Name of the currently selected layout
+- **Layout switcher** - Right-click context menu for instant layout switching
+
+## Appearance
+
+The overlay appears as a small semi-transparent box in the bottom-right corner:
+
+```
+┌──────────────┐
+│ mobile       │
+│ 375 × 667    │
+└──────────────┘
+```
+
+**Styling:**
+- Fixed position: bottom-right (10px offset)
+- Semi-transparent black background: `rgba(0, 0, 0, 0.6)`
+- White monospace text (12px)
+- Z-index: 10000 (always on top)
+- Non-intrusive: Minimal pointer events
+
+## Implementation
+
+The overlay is created automatically during dashboard initialization:
+
+```javascript
+// source/main.js:44-45
+let currentLayoutName = selectedLayout.name;
+let devOverlay = createDevOverlay(dashboardConfig.layouts, currentLayoutName);
+```
+
+### Auto-Update on Resize
+
+Screen dimensions update immediately on window resize:
+
+```javascript
+// source/main.js:52-56
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    updateDevOverlay(devOverlay, currentLayoutName);
+  }, 250);
+});
+```
+
+**Debouncing:** Updates are debounced by 250ms to prevent excessive re-renders.
+
+### Layout Name Updates
+
+The overlay displays the updated layout name when automatic layout switching occurs:
+
+```javascript
+// source/main.js:61-66
+const newLayout = selectLayout(dashboardConfig.layouts);
+if (newLayout.name !== currentLayoutName) {
+  currentLayoutName = newLayout.name;
+  renderLayout(newLayout, container);
+  updateDevOverlay(devOverlay, currentLayoutName);
+}
+```
+
+## Layout Switcher
+
+### Opening the Menu
+
+**Right-click** (or long-press on mobile) on the overlay to open the layout switcher menu.
+
+```javascript
+// source/core/devOverlay.js:69-74
+content.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  showMenu(menu, e.clientX, e.clientY);
+});
+```
+
+### Menu Contents
+
+The context menu lists all available layouts defined in your configuration:
+
+```
+┌────────────────┐
+│ mobile         │  ← Hover to highlight
+│ tablet         │
+│ desktop        │
+│ presentation   │
+└────────────────┘
+```
+
+**Styling:**
+- Dark background: `rgba(0, 0, 0, 0.9)`
+- White monospace text
+- Hover highlight: `rgba(255, 255, 255, 0.2)`
+- Auto-positioned to stay on screen
+
+### Switching Layouts
+
+Click any layout name to switch to it:
+
+```javascript
+// source/core/devOverlay.js:194-198
+function switchLayout(layoutName) {
+  const newPath = `/${layoutName}`;
+  window.location.href = newPath;
+}
+```
+
+This updates the URL using the [direct path pattern](/advanced/layout-urls#direct-path-highest-priority) and reloads the page with the selected layout.
+
+### Closing the Menu
+
+The menu closes when:
+- You click a layout name (and switch)
+- You click anywhere outside the menu
+- You click outside the overlay
+
+```javascript
+// source/core/devOverlay.js:76-81
+document.addEventListener('click', (e) => {
+  if (!menu.contains(e.target) && !content.contains(e.target)) {
+    hideMenu(menu);
+  }
+});
+```
+
+## Smart Menu Positioning
+
+The context menu automatically adjusts its position to stay within the viewport:
+
+```javascript
+// source/core/devOverlay.js:167-187
+requestAnimationFrame(() => {
+  const menuRect = menu.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  
+  let left = x;
+  let top = y;
+  
+  // Adjust if menu would go off-screen
+  if (left + menuRect.width > viewportWidth) {
+    left = viewportWidth - menuRect.width - 10;
+  }
+  if (top + menuRect.height > viewportHeight) {
+    top = viewportHeight - menuRect.height - 10;
+  }
+  if (left < 0) left = 10;
+  if (top < 0) top = 10;
+  
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+});
+```
+
+This ensures the menu is always fully visible, even when right-clicking near screen edges.
+
+## Development Workflow
+
+### Testing Responsive Layouts
+
+1. Open your dashboard in the browser
+2. Open DevTools (F12)
+3. Enable device toolbar (Ctrl+Shift+M / Cmd+Shift+M)
+4. Watch the overlay update as you resize
+5. Observe layout name changes when media query breakpoints are crossed
+
+### Quick Layout Testing
+
+1. Right-click the developer overlay
+2. Select any layout from the menu
+3. Test functionality in that layout
+4. Right-click again to switch to another layout
+
+No need to manually edit URLs or resize the window.
+
+### Debugging Media Queries
+
+Use the overlay to verify which layout is active:
+
+```javascript
+// Example: Verify tablet layout is selected
+// If overlay shows "tablet" at 800px width, media query is working
+layouts: [
+  { name: "mobile", mediaQuery: "(max-width: 768px)", ... },
+  { name: "tablet", mediaQuery: "(max-width: 1024px)", ... },
+  { name: "desktop", ... }
+]
+```
+
+Resize the browser and watch the overlay display the active layout name.
+
+### Verifying URL Overrides
+
+1. Access dashboard with URL override: `http://localhost:8000/mobile`
+2. Resize the window
+3. Overlay should show "mobile" and **not** change layouts
+4. This confirms [URL override behavior](/advanced/layout-urls#disables-automatic-switching) is working
+
+## Production Deployment
+
+### Disabling the Overlay
+
+The developer overlay is enabled by default. To disable it in production:
+
+**Option 1: Conditional Creation**
+
+Modify `source/main.js` to only create the overlay in development:
+
+```javascript
+// Create developer overlay only in development
+let devOverlay = null;
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  devOverlay = createDevOverlay(dashboardConfig.layouts, currentLayoutName);
+}
+```
+
+**Option 2: Environment Variable**
+
+Use a build-time environment variable:
+
+```javascript
+let devOverlay = null;
+if (import.meta.env.DEV) {
+  devOverlay = createDevOverlay(dashboardConfig.layouts, currentLayoutName);
+}
+```
+
+**Option 3: CSS Display**
+
+Hide the overlay with CSS in production builds:
+
+```css
+/* production.css */
+#dev-overlay,
+#dev-overlay-menu {
+  display: none !important;
+}
+```
+
+### Keeping it Enabled
+
+Some use cases for keeping the overlay in production:
+
+- **Internal dashboards** - Help users understand which layout they're viewing
+- **Testing environments** - Allow QA to quickly switch layouts
+- **Multi-layout dashboards** - Let users manually select their preferred layout
+
+## Keyboard Shortcuts
+
+While the overlay doesn't have built-in keyboard shortcuts, you can add them:
+
+```javascript
+// Add to source/main.js
+document.addEventListener('keydown', (e) => {
+  // Press 'L' to toggle layout menu
+  if (e.key === 'l' && !e.ctrlKey && !e.metaKey) {
+    const overlay = document.getElementById('dev-overlay');
+    if (overlay) {
+      // Trigger right-click event programmatically
+      const event = new MouseEvent('contextmenu', {
+        bubbles: true,
+        clientX: overlay.offsetLeft + overlay.offsetWidth / 2,
+        clientY: overlay.offsetTop + overlay.offsetHeight / 2
+      });
+      overlay.querySelector('div').dispatchEvent(event);
+    }
+  }
+});
+```
+
+## Customization
+
+The overlay appearance can be customized by modifying `source/core/devOverlay.js`:
+
+### Positioning
+
+```javascript
+// Change from bottom-right to top-left
+overlay.style.cssText = `
+  position: fixed;
+  top: 10px;        // Changed from bottom
+  left: 10px;       // Changed from right
+  ...
+`;
+```
+
+### Styling
+
+```javascript
+// Make overlay more transparent
+background: rgba(0, 0, 0, 0.3);  // Was 0.6
+
+// Larger text
+font-size: 14px;  // Was 12px
+
+// Different color
+color: #00ff00;   // Was white
+```
+
+### Additional Information
+
+Add more data to the overlay:
+
+```javascript
+function createDevOverlay(layouts, currentLayoutName) {
+  // ... existing code ...
+  
+  // Add user agent info
+  const uaText = document.createElement('div');
+  uaText.textContent = navigator.userAgent.includes('Mobile') ? '📱 Mobile' : '💻 Desktop';
+  content.appendChild(uaText);
+  
+  // ... rest of code ...
+}
+```
+
+## Related
+
+- [Layout URLs](/advanced/layout-urls) - How layout switching updates URLs
+- [Media Queries](/advanced/media-queries) - Automatic layout selection
+- [Layouts](/configuration/layouts) - Layout configuration reference

@@ -1,0 +1,394 @@
+---
+title: "Layout Configuration"
+description: "Configure responsive layouts with media queries and grid positioning"
+---
+
+## Layout Object Schema
+
+Each layout in the `layouts` array defines a grid-based dashboard configuration. From `source/core/renderer.js:35-62`, layouts support the following properties:
+
+```javascript
+{
+  name: string,           // Required: Unique identifier
+  mediaQuery: string,     // Optional: CSS media query
+  rows: number,          // Required: Number of grid rows (> 0)
+  columns: number,       // Required: Number of grid columns (> 0)
+  tiles: Array           // Required: Array of tile configurations
+}
+```
+
+### Required Properties
+
+#### name
+
+A unique string identifier for the layout.
+
+```javascript
+name: "desktop"
+```
+
+<Warning>
+Layout names must be unique across all layouts. Duplicate names will cause an error during initialization.
+</Warning>
+
+Validation from `source/core/renderer.js:44-46`:
+
+```javascript
+if (typeof layout.name !== 'string' || !layout.name) {
+  throw new Error('Layout must have a valid name string');
+}
+```
+
+#### rows
+
+The number of horizontal grid rows. Must be a positive number.
+
+```javascript
+rows: 4
+```
+
+Validation from `source/core/renderer.js:52-54`:
+
+```javascript
+if (typeof layout.rows !== 'number' || layout.rows <= 0) {
+  throw new Error('Layout rows must be a positive number');
+}
+```
+
+#### columns
+
+The number of vertical grid columns. Must be a positive number.
+
+```javascript
+columns: 6
+```
+
+Validation from `source/core/renderer.js:56-58`:
+
+```javascript
+if (typeof layout.columns !== 'number' || layout.columns <= 0) {
+  throw new Error('Layout columns must be a positive number');
+}
+```
+
+#### tiles
+
+An array of tile configuration objects.
+
+```javascript
+tiles: [
+  {
+    type: TileType.APPLICATION,
+    layout: { x: 0, y: 0, width: 1, height: 1 },
+    config: { /* tile-specific config */ }
+  }
+]
+```
+
+Validation from `source/core/renderer.js:60-62`:
+
+```javascript
+if (!Array.isArray(layout.tiles)) {
+  throw new Error('Layout tiles must be an array');
+}
+```
+
+### Optional Properties
+
+#### mediaQuery
+
+A CSS media query string that determines when this layout is active.
+
+```javascript
+mediaQuery: "(min-width: 1024px)"
+```
+
+Validation from `source/core/renderer.js:48-50`:
+
+```javascript
+if (layout.mediaQuery !== undefined && typeof layout.mediaQuery !== 'string') {
+  throw new Error('Layout mediaQuery must be a string if provided');
+}
+```
+
+<Info>
+If no layouts match their media queries, the first layout without a `mediaQuery` is used as a fallback.
+</Info>
+
+## Layout Selection
+
+From `source/core/layoutSelector.js:1-45`, ZeroDash uses a priority-based system to select which layout to display:
+
+### Priority Order
+
+1. **URL Override** (highest priority)
+2. **Media Query Matching**
+3. **Fallback Layout**
+4. **Error** (if no layout can be resolved)
+
+### 1. URL Override
+
+You can force a specific layout using URL patterns. From `source/core/layoutSelector.js:47-77`:
+
+#### Direct Path
+
+Highest priority - `/<layoutName>`
+
+```bash
+https://dashboard.example.com/mobile
+```
+
+```javascript
+if (pathname !== '/' && pathname.length > 1) {
+  const directMatch = pathname.match(/^/([^/]+)$/);
+  if (directMatch) {
+    const layoutName = decodeURIComponent(directMatch[1]);
+    if (layoutName && !layoutName.includes('.')) {
+      return layoutName;
+    }
+  }
+}
+```
+
+#### Layout Path
+
+`/layout/<layoutName>`
+
+```bash
+https://dashboard.example.com/layout/mobile
+```
+
+```javascript
+const pathMatch = pathname.match(//layout/([^/]+)/);
+if (pathMatch) {
+  return decodeURIComponent(pathMatch[1]);
+}
+```
+
+#### Query Parameter
+
+`?layout=<layoutName>`
+
+```bash
+https://dashboard.example.com?layout=mobile
+```
+
+```javascript
+const params = new URLSearchParams(window.location.search);
+const layoutParam = params.get('layout');
+if (layoutParam) {
+  return decodeURIComponent(layoutParam);
+}
+```
+
+### 2. Media Query Matching
+
+If no URL override is present, layouts are tested in array order. From `source/core/layoutSelector.js:23-35`:
+
+```javascript
+for (const layout of layouts) {
+  if (layout.mediaQuery) {
+    try {
+      if (window.matchMedia(layout.mediaQuery).matches) {
+        return layout;
+      }
+    } catch (error) {
+      console.warn(`Invalid media query for layout "${layout.name}": ${layout.mediaQuery}`, error);
+      // Continue to next layout
+    }
+  }
+}
+```
+
+<Note>
+Invalid media queries are logged as warnings but don't crash the application. Layout selection continues to the next layout.
+</Note>
+
+### 3. Fallback Layout
+
+The first layout without a `mediaQuery` serves as the fallback. From `source/core/layoutSelector.js:37-41`:
+
+```javascript
+const fallbackLayout = layouts.find(l => !l.mediaQuery);
+if (fallbackLayout) {
+  return fallbackLayout;
+}
+```
+
+## Grid System
+
+From `source/core/renderer.js:16-21`, layouts use CSS Grid for positioning:
+
+```javascript
+container.style.display = 'grid';
+container.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
+container.style.gridTemplateColumns = `repeat(${layout.columns}, 1fr)`;
+container.style.gap = '10px';
+container.style.width = '100%';
+container.style.height = '100%';
+```
+
+- Grid uses equal-sized rows and columns (`1fr`)
+- Default gap of `10px` between tiles
+- Container fills 100% of available width and height
+
+## Responsive Layout Example
+
+```javascript user/config.js
+export const dashboardConfig = {
+  layouts: [
+    // Desktop layout - wide screen
+    {
+      name: "desktop",
+      mediaQuery: "(min-width: 1024px)",
+      rows: 4,
+      columns: 6,
+      tiles: [
+        {
+          type: TileType.APPLICATION,
+          layout: { x: 0, y: 0, width: 2, height: 2 },
+          config: {
+            label: "Home Assistant",
+            url: "https://homeassistant.local",
+            target: "new"
+          }
+        },
+        {
+          type: TileType.LINK,
+          layout: { x: 2, y: 0, width: 1, height: 1 },
+          config: {
+            label: "Plex",
+            url: "https://plex.local",
+            target: "new"
+          }
+        }
+      ]
+    },
+    
+    // Tablet layout
+    {
+      name: "tablet",
+      mediaQuery: "(min-width: 768px) and (max-width: 1023px)",
+      rows: 6,
+      columns: 4,
+      tiles: [
+        // Reorganized for tablet
+      ]
+    },
+    
+    // Mobile layout - narrow screen
+    {
+      name: "mobile",
+      mediaQuery: "(max-width: 767px)",
+      rows: 8,
+      columns: 2,
+      tiles: [
+        // Stacked layout for mobile
+      ]
+    },
+    
+    // Fallback - no media query
+    {
+      name: "default",
+      rows: 4,
+      columns: 4,
+      tiles: [
+        // Default layout if nothing matches
+      ]
+    }
+  ]
+};
+```
+
+## Dynamic Layout Switching
+
+From `source/main.js:51-83`, ZeroDash automatically switches layouts on window resize:
+
+```javascript
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    // Only re-select if no URL override
+    if (!getUrlOverride()) {
+      try {
+        const newLayout = selectLayout(dashboardConfig.layouts);
+        if (newLayout.name !== currentLayoutName) {
+          currentLayoutName = newLayout.name;
+          renderLayout(newLayout, container);
+        } else {
+          // Layout didn't change, but window resized - re-fit text
+          requestAnimationFrame(() => {
+            fitAllLabels(container);
+          });
+        }
+      } catch (error) {
+        console.error('Layout reselection error:', error);
+      }
+    }
+  }, 250);
+});
+```
+
+<Info>
+Resize events are debounced (250ms) to prevent excessive re-rendering. URL overrides prevent automatic layout switching.
+</Info>
+
+## Common Media Queries
+
+```javascript
+// Desktop
+mediaQuery: "(min-width: 1024px)"
+
+// Tablet
+mediaQuery: "(min-width: 768px) and (max-width: 1023px)"
+
+// Mobile
+mediaQuery: "(max-width: 767px)"
+
+// Portrait orientation
+mediaQuery: "(orientation: portrait)"
+
+// Landscape orientation
+mediaQuery: "(orientation: landscape)"
+
+// High DPI screens
+mediaQuery: "(min-resolution: 2dppx)"
+
+// Prefer dark mode
+mediaQuery: "(prefers-color-scheme: dark)"
+```
+
+## Validation and Error Handling
+
+Unknown keys in layout configuration trigger errors. From `source/core/renderer.js:36-42`:
+
+```javascript
+const allowedKeys = ['name', 'mediaQuery', 'rows', 'columns', 'tiles'];
+const keys = Object.keys(layout);
+const unknownKeys = keys.filter(key => !allowedKeys.includes(key));
+
+if (unknownKeys.length > 0) {
+  throw new Error(`Unknown keys in layout: ${unknownKeys.join(', ')}`);
+}
+```
+
+<Warning>
+Always validate your configuration by running ZeroDash locally and checking the browser console for errors.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tile Configuration" icon="square" href="/configuration/tiles">
+    Learn how to configure and position tiles within layouts
+  </Card>
+  <Card title="Media Queries" icon="mobile" href="/advanced/media-queries">
+    Advanced media query techniques for responsive design
+  </Card>
+  <Card title="Layout URLs" icon="link" href="/advanced/layout-urls">
+    Using URL overrides for layout testing
+  </Card>
+  <Card title="Developer Overlay" icon="code" href="/advanced/developer-overlay">
+    Visualize grid layout during development
+  </Card>
+</CardGroup>

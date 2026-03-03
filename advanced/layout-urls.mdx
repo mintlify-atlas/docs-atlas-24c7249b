@@ -1,0 +1,263 @@
+---
+title: Layout URLs
+description: Override the active layout using URL patterns for testing, sharing, and direct access to specific dashboard configurations
+---
+
+ZeroDash allows you to override the automatic layout selection by specifying a layout name in the URL. This is useful for testing, sharing specific views, or creating bookmarks for different layouts.
+
+## URL Override Priority
+
+URL overrides have the **highest priority** in layout selection, taking precedence over media queries and fallback layouts.
+
+Selection order:
+1. **URL Override** ← Always checked first
+2. Media Query Matching
+3. Fallback Layout
+
+## URL Patterns
+
+ZeroDash supports three URL patterns for layout overrides, listed in order of priority:
+
+### 1. Direct Path (Highest Priority)
+
+Access a layout directly at the root level:
+
+```
+https://your-dashboard.com/mobile
+https://your-dashboard.com/desktop
+https://your-dashboard.com/dark-mode
+```
+
+**Pattern:** `/<layoutName>`
+
+**Rules:**
+- Only matches exact single-segment paths (e.g., `/mobile`)
+- Does not match `/` (root) or paths with file extensions
+- Ignores common files like `index.html`
+
+**Implementation:**
+```javascript
+// source/core/layoutSelector.js:47-61
+const directMatch = pathname.match(/^\/([^\/]+)$/);
+if (directMatch) {
+  const layoutName = decodeURIComponent(directMatch[1]);
+  if (layoutName && !layoutName.includes('.')) {
+    return layoutName;
+  }
+}
+```
+
+### 2. Layout Path Prefix
+
+Use the `/layout/` prefix for explicit layout selection:
+
+```
+https://your-dashboard.com/layout/mobile
+https://your-dashboard.com/layout/desktop
+```
+
+**Pattern:** `/layout/<layoutName>`
+
+**Implementation:**
+```javascript
+// source/core/layoutSelector.js:63-67
+const pathMatch = pathname.match(/\/layout\/([^\/]+)/);
+if (pathMatch) {
+  return decodeURIComponent(pathMatch[1]);
+}
+```
+
+### 3. Query Parameter
+
+Pass the layout name as a query parameter:
+
+```
+https://your-dashboard.com?layout=mobile
+https://your-dashboard.com/index.html?layout=desktop
+```
+
+**Pattern:** `?layout=<layoutName>`
+
+**Implementation:**
+```javascript
+// source/core/layoutSelector.js:69-74
+const params = new URLSearchParams(window.location.search);
+const layoutParam = params.get('layout');
+if (layoutParam) {
+  return decodeURIComponent(layoutParam);
+}
+```
+
+## URL Encoding
+
+Layout names are automatically URL-decoded, allowing special characters:
+
+```
+# Space in layout name
+/layout/dark%20mode → selects layout "dark mode"
+
+# Special characters
+?layout=mobile%2Blandscape → selects layout "mobile+landscape"
+```
+
+## Error Handling
+
+If a URL-specified layout doesn't exist, ZeroDash throws an error:
+
+```javascript
+// source/core/layoutSelector.js:16-20
+const layout = layouts.find(l => l.name === urlOverride);
+if (!layout) {
+  throw new Error(`Layout "${urlOverride}" not found (URL override)`);
+}
+```
+
+This prevents silent failures and makes debugging easier.
+
+## Behavior with URL Overrides
+
+### Disables Automatic Switching
+
+When a URL override is active:
+- Media query changes are **ignored**
+- Layout does **not** switch on window resize
+- The specified layout remains locked
+
+```javascript
+// source/main.js:58-59
+if (!getUrlOverride()) {
+  // Only re-select layout if no URL override
+  const newLayout = selectLayout(dashboardConfig.layouts);
+}
+```
+
+### Text Fitting Still Works
+
+Even with a URL override, text labels are re-fitted on window resize:
+
+```javascript
+// source/main.js:76-81
+if (getUrlOverride()) {
+  // URL override active - just re-fit text on resize
+  requestAnimationFrame(() => {
+    fitAllLabels(container);
+  });
+}
+```
+
+## Use Cases
+
+### Testing Layouts
+
+Quickly test different layouts without changing code:
+
+```bash
+# Test mobile layout
+open http://localhost:8000/mobile
+
+# Test tablet layout
+open http://localhost:8000?layout=tablet
+```
+
+### Sharing Specific Views
+
+Share URLs that always show a specific layout:
+
+```
+# Share desktop layout with team
+https://dashboard.company.com/desktop
+
+# Share presentation mode
+https://dashboard.company.com/layout/presentation
+```
+
+### Bookmarks
+
+Create browser bookmarks for frequently used layouts:
+
+```
+Bookmarks:
+  📱 Mobile View    → https://dashboard.company.com/mobile
+  💻 Desktop View   → https://dashboard.company.com/desktop
+  🌙 Dark Mode      → https://dashboard.company.com/dark-mode
+```
+
+### Development
+
+Lock a layout while developing:
+
+```javascript
+// Work on mobile layout without window size affecting it
+localhost:8000/mobile
+```
+
+### Integration
+
+Link to specific layouts from other applications:
+
+```html
+<a href="https://dashboard.company.com/layout/sales">Sales Dashboard</a>
+<a href="https://dashboard.company.com/layout/engineering">Engineering Dashboard</a>
+```
+
+## Developer Overlay Integration
+
+The [Developer Overlay](/advanced/developer-overlay) provides a quick way to switch layouts, which updates the URL using the direct path pattern:
+
+```javascript
+// source/core/devOverlay.js:194-198
+function switchLayout(layoutName) {
+  const newPath = `/${layoutName}`;
+  window.location.href = newPath;
+}
+```
+
+Right-click the overlay → select layout → URL updates to `/<layoutName>`.
+
+## Server Configuration
+
+For direct path URLs to work, configure your web server to serve `index.html` for all routes:
+
+### Nginx
+
+```nginx
+location / {
+  try_files $uri $uri/ /index.html;
+}
+```
+
+### Apache (.htaccess)
+
+```apache
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+```
+
+### Node.js (Express)
+
+```javascript
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+```
+
+### Python (Flask)
+
+```python
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    return send_from_directory('dist', 'index.html')
+```
+
+See [Deployment](/advanced/deployment) for complete hosting configurations.
+
+## Related
+
+- [Media Queries](/advanced/media-queries) - Automatic layout selection
+- [Developer Overlay](/advanced/developer-overlay) - Visual layout switcher
+- [Deployment](/advanced/deployment) - Server configuration for URL routing

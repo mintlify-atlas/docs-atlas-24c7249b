@@ -1,0 +1,198 @@
+---
+title: "Webhook Tile"
+description: "Display and trigger webhook content with HTML rendering"
+---
+
+The Webhook tile type fetches and displays HTML content from a URL. It can show initial content on load and trigger webhook calls when clicked, making it ideal for embedding dynamic content or triggering remote actions with visual feedback.
+
+## Configuration
+
+Webhook tiles support the following configuration options:
+
+<ParamField path="targetUrl" type="string" required>
+  The webhook URL to call when the tile is clicked. The HTML response from this URL is rendered in the tile.
+  
+  ```json
+  "targetUrl": "https://api.company.com/webhook/trigger"
+  ```
+</ParamField>
+
+<ParamField path="method" type="string" required>
+  The HTTP method to use when triggering the webhook. Must be one of:
+  - `"GET"` - Simple GET request
+  - `"POST"` - POST request (can include payload)
+  
+  ```json
+  "method": "POST"
+  ```
+</ParamField>
+
+<ParamField path="payload" type="object">
+  Optional JSON payload to send with POST requests. Must be a plain object (not an array). The payload is JSON-stringified and sent with `Content-Type: application/json`.
+  
+  ```json
+  "payload": {
+    "event": "dashboard_click",
+    "timestamp": "{{now}}"
+  }
+  ```
+</ParamField>
+
+<ParamField path="statusCheckUrl" type="string">
+  Optional URL to fetch and display on initial load. If not provided, the `targetUrl` is fetched on load instead. This is useful for showing status information before the webhook is triggered.
+  
+  ```json
+  "statusCheckUrl": "https://api.company.com/status/current"
+  ```
+</ParamField>
+
+## Behavior
+
+Webhook tiles have two distinct phases:
+
+### Initial Load
+
+- If `statusCheckUrl` is provided, that URL is fetched (using GET method)
+- If `statusCheckUrl` is not provided, `targetUrl` is fetched instead
+- The HTML response is rendered inside the tile
+
+### On Click
+
+- The tile becomes clickable with a pointer cursor
+- Clicking triggers a request to `targetUrl` using the configured `method` and `payload`
+- The HTML response replaces the current content
+
+### Content Rendering
+
+- Response content is inserted as HTML using `innerHTML`
+- The content area scrolls if the content overflows
+- Error messages are displayed in red if the request fails
+
+## Example Configurations
+
+### Status Display with Trigger
+
+```json
+{
+  "type": "webhook",
+  "layout": {
+    "x": 0,
+    "y": 4,
+    "width": 2,
+    "height": 2
+  },
+  "config": {
+    "targetUrl": "https://api.company.com/deploy/trigger",
+    "method": "POST",
+    "statusCheckUrl": "https://api.company.com/deploy/status",
+    "payload": {
+      "action": "deploy",
+      "env": "production"
+    }
+  }
+}
+```
+
+In this example:
+1. On load, the deployment status is fetched from `statusCheckUrl` and displayed
+2. When clicked, a deployment is triggered via POST to `targetUrl`
+3. The deployment response HTML is displayed in the tile
+
+### Simple Webhook
+
+```json
+{
+  "type": "webhook",
+  "layout": {
+    "x": 2,
+    "y": 4,
+    "width": 1,
+    "height": 1
+  },
+  "config": {
+    "targetUrl": "https://api.company.com/webhook/notify",
+    "method": "GET"
+  }
+}
+```
+
+Without `statusCheckUrl`, the `targetUrl` is fetched on initial load using GET (regardless of the configured method for clicks).
+
+## Validation Rules
+
+The WebhookTile class enforces these validation rules:
+
+- `targetUrl` must be a non-empty string
+- `method` must be either `"GET"` or `"POST"` (required, no default)
+- `payload` must be a plain object if provided (arrays not allowed)
+- `statusCheckUrl` must be a string if provided
+- No unknown configuration keys are allowed
+
+## Response Handling
+
+### Successful Response
+
+- The response is treated as HTML text
+- Content is rendered directly into the tile using `innerHTML`
+- The tile content area has `overflow: auto` for scrolling
+
+### Error Response
+
+- Errors are caught and displayed in the tile
+- Error format: `<div style="padding: 10px; color: red;">Error: [message]</div>`
+- Both network errors and fetch failures are handled
+
+## Security Considerations
+
+Webhook tiles use `innerHTML` to render responses, which means:
+
+- The server response can include HTML and inline scripts
+- Only use webhook tiles with trusted endpoints
+- Consider sanitizing HTML on the server side before sending responses
+- Avoid embedding user-generated content without sanitization
+
+## Use Cases
+
+### Build Status Display
+
+Show current build status on load, trigger new build on click:
+
+```json
+{
+  "config": {
+    "targetUrl": "https://ci.company.com/build/start",
+    "method": "POST",
+    "statusCheckUrl": "https://ci.company.com/build/status"
+  }
+}
+```
+
+### Dynamic Content Widget
+
+Display live metrics or dashboards:
+
+```json
+{
+  "config": {
+    "targetUrl": "https://metrics.company.com/dashboard",
+    "method": "GET"
+  }
+}
+```
+
+### Notification Trigger
+
+Send notifications and display confirmation:
+
+```json
+{
+  "config": {
+    "targetUrl": "https://api.company.com/notify",
+    "method": "POST",
+    "payload": {
+      "channel": "#alerts",
+      "message": "Dashboard button pressed"
+    }
+  }
+}
+```

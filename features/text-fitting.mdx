@@ -1,0 +1,446 @@
+---
+title: "Dynamic Text Fitting"
+description: "Automatic font size adjustment to prevent label truncation in dashboard tiles"
+---
+
+ZeroDash automatically adjusts font sizes to ensure labels fit within their containers before resorting to ellipsis truncation.
+
+## How It Works
+
+The text fitting algorithm:
+
+1. **Start at maximum font size** (default: 18px)
+2. **Measure text width** using `scrollWidth` vs `clientWidth`
+3. **Reduce font size** by 1px if text overflows
+4. **Repeat** until text fits or minimum size is reached (default: 8px)
+5. **Apply ellipsis** only if text still doesn't fit at minimum size
+
+```javascript
+// From source/core/textFitter.js:49-57
+while (
+  size > minFontSize &&
+  element.scrollWidth > element.clientWidth
+) {
+  size--;
+  element.style.fontSize = size + 'px';
+  void element.offsetHeight; // Force reflow
+}
+```
+
+## Usage
+
+### Single Element
+
+```javascript
+import { fitTextToWidth } from './core/textFitter.js';
+
+const labelElement = document.querySelector('.tile-label');
+fitTextToWidth(labelElement);
+```
+
+### All Labels in Container
+
+```javascript
+import { fitAllLabels } from './core/textFitter.js';
+
+const dashboard = document.querySelector('#dashboard');
+fitAllLabels(dashboard);
+```
+
+## Configuration Options
+
+### Default Options
+
+```javascript
+fitTextToWidth(element, {
+  minFontSize: 8,   // Minimum size in pixels
+  maxFontSize: 18   // Maximum size in pixels
+});
+```
+
+### Custom Options
+
+```javascript
+// Tighter range for compact tiles
+fitTextToWidth(element, {
+  minFontSize: 10,
+  maxFontSize: 14
+});
+
+// Wider range for flexible sizing
+fitTextToWidth(element, {
+  minFontSize: 6,
+  maxFontSize: 24
+});
+```
+
+## Function Reference
+
+### `fitTextToWidth(element, options)`
+
+Fits a single element's text by adjusting font size.
+
+**Parameters**:
+- `element` (HTMLElement) - The element containing text to fit
+- `options` (Object) - Configuration options
+  - `minFontSize` (number) - Minimum font size in pixels (default: 8)
+  - `maxFontSize` (number) - Maximum font size in pixels (default: 18)
+
+**Returns**: `undefined`
+
+**Source**: `source/core/textFitter.js:15-70`
+
+```javascript
+export function fitTextToWidth(element, {
+  minFontSize = 8,
+  maxFontSize = 18
+} = {}) {
+  if (!element || !element.textContent || !element.textContent.trim()) {
+    return; // Skip empty elements
+  }
+  // ... implementation ...
+}
+```
+
+### `fitAllLabels(container, options)`
+
+Applies text fitting to all label elements within a container.
+
+**Parameters**:
+- `container` (HTMLElement) - Container to search for labels
+- `options` (Object) - Options passed to `fitTextToWidth`
+
+**Returns**: `undefined`
+
+**Source**: `source/core/textFitter.js:80-103`
+
+```javascript
+export function fitAllLabels(container, options = {}) {
+  const tiles = container.querySelectorAll('.tile');
+  
+  tiles.forEach(tile => {
+    const labels = Array.from(tile.children).filter(child => {
+      return (
+        (child.tagName === 'SPAN' || child.tagName === 'DIV') &&
+        !child.classList.contains('webhook-content') &&
+        !child.classList.contains('toggle-error')
+      );
+    });
+
+    labels.forEach(label => {
+      fitTextToWidth(label, options);
+    });
+  });
+}
+```
+
+## Which Elements Get Fitted?
+
+### Included Elements
+
+```javascript
+// From source/core/textFitter.js:91-96
+const labels = Array.from(tile.children).filter(child => {
+  return (
+    (child.tagName === 'SPAN' || child.tagName === 'DIV') &&
+    !child.classList.contains('webhook-content') &&
+    !child.classList.contains('toggle-error')
+  );
+});
+```
+
+**Criteria**:
+- Must be a `<span>` or `<div>` element
+- Must be a direct child of a `.tile` element
+- Must NOT have class `.webhook-content`
+- Must NOT have class `.toggle-error`
+
+### Excluded Elements
+
+- Widget content areas (`.webhook-content`)
+- Toggle error messages (`.toggle-error`)
+- Elements without text content
+- Elements that are not direct children of tiles
+
+## Implementation Details
+
+### Step 1: Reset to Maximum
+
+```javascript
+// From source/core/textFitter.js:40-43
+let size = maxFontSize;
+element.style.fontSize = size + 'px';
+element.style.textOverflow = 'clip';
+element.style.overflow = 'hidden';
+```
+
+Start at the maximum font size and disable ellipsis to measure actual overflow.
+
+### Step 2: Ensure Visibility
+
+```javascript
+// From source/core/textFitter.js:24-37
+const originalDisplay = element.style.display;
+const originalWidth = element.style.width;
+
+if (element.style.display === 'none') {
+  element.style.display = 'inline-block';
+} else if (!element.style.display || element.style.display === '') {
+  element.style.display = 'inline-block';
+}
+
+if (!element.style.width || element.style.width === '') {
+  element.style.width = '100%';
+}
+```
+
+Temporarily set display and width properties to ensure measurements work correctly.
+
+### Step 3: Force Reflow
+
+```javascript
+// From source/core/textFitter.js:45-46, 56
+void element.offsetHeight; // Force a reflow
+```
+
+Accessing `offsetHeight` forces the browser to recalculate layout, ensuring accurate `scrollWidth` measurements.
+
+### Step 4: Measure and Reduce
+
+```javascript
+// From source/core/textFitter.js:49-57
+while (
+  size > minFontSize &&
+  element.scrollWidth > element.clientWidth
+) {
+  size--;
+  element.style.fontSize = size + 'px';
+  void element.offsetHeight; // Force reflow for accurate measurement
+}
+```
+
+**Key measurements**:
+- `element.scrollWidth`: Total width needed to display all content
+- `element.clientWidth`: Visible width of the element
+- Overflow occurs when `scrollWidth > clientWidth`
+
+### Step 5: Apply Ellipsis if Needed
+
+```javascript
+// From source/core/textFitter.js:59-62
+if (element.scrollWidth > element.clientWidth) {
+  element.style.textOverflow = 'ellipsis';
+}
+```
+
+If text still overflows at minimum font size, enable ellipsis truncation.
+
+### Step 6: Restore Original Styles
+
+```javascript
+// From source/core/textFitter.js:64-69
+if (originalWidth) {
+  element.style.width = originalWidth;
+} else if (element.style.width === '100%') {
+  element.style.width = '';
+}
+```
+
+Restore any temporary style changes made for measurement.
+
+## Examples
+
+### Example 1: Long Application Name
+
+```html
+<div class="tile" style="width: 200px;">
+  <img src="icon.png" />
+  <span>Home Assistant Dashboard</span>
+</div>
+```
+
+**Without text fitting**:
+```
+Home Assistant Das... (18px font, ellipsis)
+```
+
+**With text fitting**:
+```
+Home Assistant Dashboard (12px font, fully visible)
+```
+
+### Example 2: Very Long Name
+
+```html
+<div class="tile" style="width: 150px;">
+  <span>Extremely Long Application Name That Cannot Possibly Fit</span>
+</div>
+```
+
+**Result**:
+```
+Extremely Long Appli... (8px font, ellipsis at minimum size)
+```
+
+### Example 3: Short Name
+
+```html
+<div class="tile" style="width: 200px;">
+  <span>Plex</span>
+</div>
+```
+
+**Result**:
+```
+Plex (18px font, maximum size)
+```
+
+## Performance Considerations
+
+### Forced Reflows
+
+Each font size reduction triggers a reflow:
+
+```javascript
+void element.offsetHeight; // Force reflow
+```
+
+**Cost**: For a label that needs to shrink from 18px to 12px, this is **6 reflows**.
+
+**Mitigation**:
+- Only fit labels once on initial render
+- Batch all label updates together
+- Use `fitAllLabels()` instead of individual calls
+
+### Batch Processing
+
+```javascript
+// SLOW: Fit each tile individually
+tiles.forEach(tile => {
+  fitTextToWidth(tile.querySelector('span'));
+});
+
+// FAST: Batch process all tiles
+fitAllLabels(container);
+```
+
+Both trigger the same number of reflows, but batching reduces function call overhead.
+
+## CSS Requirements
+
+For text fitting to work correctly, ensure labels have:
+
+```css
+.tile span {
+  display: inline-block; /* or block */
+  width: 100%; /* or fixed width */
+  overflow: hidden; /* Required for measurement */
+}
+```
+
+Without these styles:
+- `scrollWidth` may not be measurable
+- Text might wrap instead of overflow
+- Measurements might be inaccurate
+
+## Edge Cases
+
+### Empty Elements
+
+```javascript
+// From source/core/textFitter.js:19-21
+if (!element || !element.textContent || !element.textContent.trim()) {
+  return; // Skip empty elements
+}
+```
+
+Empty or whitespace-only elements are skipped entirely.
+
+### Hidden Elements
+
+```javascript
+// From source/core/textFitter.js:28-32
+if (element.style.display === 'none') {
+  element.style.display = 'inline-block';
+}
+```
+
+Hidden elements are temporarily made visible for measurement, then restored.
+
+### Very Small Containers
+
+If a container is narrower than one character at minimum font size:
+
+```
+Result: "P..." (8px font, ellipsis after first character)
+```
+
+The algorithm doesn't special-case this - it simply applies ellipsis.
+
+## Debugging Text Fitting
+
+### Check Element Measurements
+
+```javascript
+const element = document.querySelector('.tile span');
+console.log({
+  scrollWidth: element.scrollWidth,  // Total content width
+  clientWidth: element.clientWidth,  // Visible width
+  fontSize: window.getComputedStyle(element).fontSize,
+  textContent: element.textContent
+});
+```
+
+### Verify CSS Properties
+
+```javascript
+const styles = window.getComputedStyle(element);
+console.log({
+  display: styles.display,
+  width: styles.width,
+  overflow: styles.overflow,
+  textOverflow: styles.textOverflow
+});
+```
+
+### Test Different Sizes
+
+```javascript
+for (let size = 18; size >= 8; size--) {
+  element.style.fontSize = size + 'px';
+  console.log(`${size}px: ${element.scrollWidth} / ${element.clientWidth}`);
+}
+```
+
+## Integration with ZeroDash
+
+Text fitting is typically called after tiles are rendered:
+
+```javascript
+// After rendering all tiles:
+import { fitAllLabels } from './core/textFitter.js';
+
+const dashboard = document.querySelector('#dashboard');
+fitAllLabels(dashboard, {
+  minFontSize: 8,
+  maxFontSize: 18
+});
+```
+
+This ensures all tile labels are optimally sized for their containers.
+
+## Technical Reference
+
+**Source file**: `source/core/textFitter.js:1-105`
+
+**Exported functions**:
+- `fitTextToWidth(element, options)`
+- `fitAllLabels(container, options)`
+
+**Default options**:
+- `minFontSize: 8`
+- `maxFontSize: 18`
+
+**CSS classes excluded from fitting**:
+- `.webhook-content`
+- `.toggle-error`

@@ -1,0 +1,95 @@
+---
+title: "Application Tile"
+description: "Launch applications with availability monitoring and customizable icons"
+---
+
+The Application tile type creates clickable tiles that launch applications or web services. It includes automatic availability monitoring to indicate whether the application is reachable.
+
+## Configuration
+
+Application tiles support the following configuration options:
+
+<ParamField path="label" type="string" required>
+  The display label shown below the application icon. This text helps users identify the application.
+  
+  ```json
+  "label": "Jenkins"
+  ```
+</ParamField>
+
+<ParamField path="url" type="string" required>
+  The target URL to open when the tile is clicked. This is the main application URL.
+  
+  ```json
+  "url": "https://jenkins.company.com"
+  ```
+</ParamField>
+
+<ParamField path="image" type="string">
+  Path or URL to the application icon image. The image will be scaled to fit within the tile while maintaining aspect ratio.
+  
+  ```json
+  "image": "./icons/jenkins.png"
+  ```
+</ParamField>
+
+<ParamField path="target" type="string" default="same">
+  Determines where to open the URL. Accepts:
+  - `"same"` - Opens in the current window/tab
+  - `"new"` - Opens in a new window/tab
+  
+  ```json
+  "target": "new"
+  ```
+</ParamField>
+
+<ParamField path="availabilityUrl" type="string">
+  Optional URL to check for application availability. If not provided, the main `url` is used for availability checks. This is useful when the main URL requires authentication but a health check endpoint doesn't.
+  
+  ```json
+  "availabilityUrl": "https://jenkins.company.com/health"
+  ```
+</ParamField>
+
+## Availability Monitoring
+
+Application tiles automatically monitor availability with the following behavior:
+
+- **Initial Check**: Availability is checked immediately when the tile is rendered
+- **Periodic Checks**: Status is refreshed every 60 seconds
+- **Timeout**: Each check has a 3-second timeout
+- **Visual Indicator**: The tile receives an `unreachable` CSS class when the application is unavailable
+- **Check URL**: Uses `availabilityUrl` if provided, otherwise falls back to the main `url`
+- **Navigation**: Always navigates to the `url`, never to `availabilityUrl`
+
+## Example Configuration
+
+```json
+{
+  "type": "application",
+  "layout": {
+    "x": 0,
+    "y": 0,
+    "width": 2,
+    "height": 2
+  },
+  "config": {
+    "label": "Jenkins CI",
+    "url": "https://jenkins.company.com",
+    "image": "./icons/jenkins.png",
+    "target": "new",
+    "availabilityUrl": "https://jenkins.company.com/api/health"
+  }
+}
+```
+
+## Validation Rules
+
+The ApplicationTile class enforces these validation rules:
+
+- `label` must be a non-empty string
+- `url` must be a non-empty string
+- `image` must be a string if provided
+- `target` must be either `"new"` or `"same"` if provided
+- `availabilityUrl` must be a string if provided
+- No unknown configuration keys are allowed

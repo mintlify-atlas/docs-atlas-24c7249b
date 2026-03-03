@@ -1,0 +1,107 @@
+---
+title: "Link Tile"
+description: "Create navigational links with optional status monitoring"
+---
+
+The Link tile type creates clickable tiles that navigate to URLs. Unlike Application tiles, Link tiles have optional status checking and use visual opacity to indicate availability.
+
+## Configuration
+
+Link tiles support the following configuration options:
+
+<ParamField path="label" type="string" required>
+  The display label shown on the tile.
+  
+  ```json
+  "label": "Documentation"
+  ```
+</ParamField>
+
+<ParamField path="url" type="string" required>
+  The target URL to navigate to when clicked.
+  
+  ```json
+  "url": "https://docs.company.com"
+  ```
+</ParamField>
+
+<ParamField path="target" type="string" required>
+  Determines where to open the URL. Must be one of:
+  - `"same"` - Opens in the current window/tab
+  - `"new"` - Opens in a new window/tab
+  
+  ```json
+  "target": "new"
+  ```
+</ParamField>
+
+<ParamField path="image" type="string">
+  Path or URL to an icon image for the link. The image will be scaled to fit within the tile.
+  
+  ```json
+  "image": "./icons/docs.svg"
+  ```
+</ParamField>
+
+<ParamField path="statusCheckUrl" type="string">
+  Optional URL to check for link availability. When provided, the tile's opacity will change based on the status:
+  - Opacity `1.0` when the URL is reachable
+  - Opacity `0.5` when the URL is unreachable
+  
+  Status checks run every 5 seconds using the HTTP HEAD method.
+  
+  ```json
+  "statusCheckUrl": "https://docs.company.com/health"
+  ```
+</ParamField>
+
+## Status Checking
+
+When `statusCheckUrl` is configured:
+
+- **Check Method**: Uses HTTP HEAD request for efficiency
+- **Check Interval**: Every 5 seconds
+- **Visual Feedback**: Changes tile opacity (1.0 = reachable, 0.5 = unreachable)
+- **No Timeout**: Relies on browser default fetch timeout
+
+## Example Configuration
+
+```json
+{
+  "type": "link",
+  "layout": {
+    "x": 2,
+    "y": 0,
+    "width": 1,
+    "height": 1
+  },
+  "config": {
+    "label": "Internal Wiki",
+    "url": "https://wiki.company.com",
+    "target": "new",
+    "image": "./icons/wiki.png",
+    "statusCheckUrl": "https://wiki.company.com"
+  }
+}
+```
+
+## Validation Rules
+
+The LinkTile class enforces these validation rules:
+
+- `label` must be a non-empty string
+- `url` must be a non-empty string
+- `target` must be either `"new"` or `"same"` (required, no default)
+- `image` must be a string if provided
+- `statusCheckUrl` must be a string if provided
+- No unknown configuration keys are allowed
+
+## Link vs Application Tiles
+
+| Feature | Link Tile | Application Tile |
+|---------|-----------|------------------|
+| Status monitoring | Optional | Always enabled |
+| Status method | HEAD request | GET request |
+| Check interval | 5 seconds | 60 seconds |
+| Visual indicator | Opacity change | CSS class |
+| Target default | Required | Defaults to "same" |

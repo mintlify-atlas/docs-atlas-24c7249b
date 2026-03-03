@@ -1,0 +1,155 @@
+---
+title: TileType
+description: Enumeration of all supported tile type constants
+---
+
+The `TileType` object provides frozen constants for all supported tile types in ZeroDash. Use these constants when creating tile configurations to ensure type safety and avoid typos.
+
+## Constants
+
+The `TileType` object is frozen using `Object.freeze()`, making it immutable.
+
+### WIDGET
+
+```javascript
+TileType.WIDGET // "widget"
+```
+
+Represents an iframe-based widget tile that displays external web content.
+
+**Use case:** Embedding third-party dashboards, charts, or interactive web apps
+
+---
+
+### WEBHOOK
+
+```javascript
+TileType.WEBHOOK // "webhook"
+```
+
+Represents a webhook tile that sends HTTP requests when triggered.
+
+**Use case:** Triggering automated workflows or API endpoints
+
+---
+
+### BUTTON
+
+```javascript
+TileType.BUTTON // "button"
+```
+
+Represents a clickable button tile that executes HTTP requests.
+
+**Use case:** One-click actions like deployments, restarts, or API calls
+
+---
+
+### TOGGLE
+
+```javascript
+TileType.TOGGLE // "toggle"
+```
+
+Represents a toggle switch tile with on/off states.
+
+**Use case:** Controlling binary states like feature flags or system settings
+
+---
+
+### LINK
+
+```javascript
+TileType.LINK // "link"
+```
+
+Represents a navigational link tile.
+
+**Use case:** Quick access to frequently used URLs or internal pages
+
+---
+
+### APPLICATION
+
+```javascript
+TileType.APPLICATION // "application"
+```
+
+Represents an application launcher tile.
+
+**Use case:** Launching applications or services with a single click
+
+## Usage
+
+### Basic Usage
+
+```javascript
+import { TileType } from './core/TileType.js';
+
+const tileConfig = {
+  type: TileType.BUTTON,
+  config: {
+    label: 'Deploy',
+    url: 'https://api.example.com/deploy'
+  }
+};
+```
+
+### With TileFactory
+
+```javascript
+import { TileFactory } from './core/TileFactory.js';
+import { TileType } from './core/TileType.js';
+
+const linkTile = TileFactory.create({
+  type: TileType.LINK,
+  config: {
+    label: 'Documentation',
+    url: 'https://docs.example.com',
+    target: 'new'
+  }
+});
+```
+
+### Type Checking
+
+```javascript
+function validateTileType(type) {
+  const validTypes = Object.values(TileType);
+  
+  if (!validTypes.includes(type)) {
+    throw new Error(`Invalid tile type: ${type}`);
+  }
+  
+  return true;
+}
+
+validateTileType(TileType.WIDGET); // true
+validateTileType('invalid'); // throws error
+```
+
+## Implementation Details
+
+The `TileType` object is defined as:
+
+```javascript
+export const TileType = Object.freeze({
+  WIDGET: "widget",
+  WEBHOOK: "webhook",
+  BUTTON: "button",
+  TOGGLE: "toggle",
+  LINK: "link",
+  APPLICATION: "application"
+});
+```
+
+### Why Object.freeze()?
+
+`Object.freeze()` ensures that:
+- Constants cannot be modified at runtime
+- No new properties can be added
+- Type values remain consistent across the application
+
+## Source Reference
+
+**File:** `source/core/TileType.js:1-8`

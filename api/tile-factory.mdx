@@ -1,0 +1,130 @@
+---
+title: TileFactory
+description: Factory class for creating tile instances from configuration objects
+---
+
+The `TileFactory` class provides static methods to instantiate tile objects based on their type. It handles the creation of all supported tile types and provides error handling for invalid configurations.
+
+## Methods
+
+### create()
+
+Creates a single tile instance from a configuration object.
+
+```javascript
+const tile = TileFactory.create(tileConfig);
+```
+
+<ParamField path="tileConfig" type="object" required>
+  The tile configuration object
+  
+  <ParamField path="tileConfig.type" type="string" required>
+    The type of tile to create. Must be one of the values from [TileType](/api/tile-types)
+  </ParamField>
+  
+  <ParamField path="tileConfig.config" type="object" required>
+    The tile-specific configuration. Structure depends on the tile type.
+  </ParamField>
+</ParamField>
+
+<ResponseField name="return" type="Tile">
+  Returns an instance of the appropriate tile class (WidgetTile, WebhookTile, ButtonTile, ToggleTile, LinkTile, or ApplicationTile)
+</ResponseField>
+
+#### Error Handling
+
+Throws an error if the tile type is not recognized:
+
+```javascript
+throw new Error(`Unknown tile type: ${tileConfig.type}`);
+```
+
+**Example:**
+
+```javascript
+const buttonConfig = {
+  type: TileType.BUTTON,
+  config: {
+    label: 'Deploy',
+    url: 'https://api.example.com/deploy',
+    method: 'POST'
+  }
+};
+
+const buttonTile = TileFactory.create(buttonConfig);
+```
+
+---
+
+### createAll()
+
+Creates multiple tile instances from an array of configurations and renders them to a container.
+
+```javascript
+const tiles = TileFactory.createAll(tileConfigs, container);
+```
+
+<ParamField path="tileConfigs" type="array" required>
+  Array of tile configuration objects. Each object must have a `type` and `config` property.
+</ParamField>
+
+<ParamField path="container" type="HTMLElement" required>
+  The DOM container element where tiles will be rendered
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Returns an array of objects with the following structure:
+  
+  <ResponseField name="tile" type="Tile">
+    The tile instance
+  </ResponseField>
+  
+  <ResponseField name="element" type="HTMLElement">
+    The rendered DOM element for the tile
+  </ResponseField>
+</ResponseField>
+
+#### Error Handling
+
+This method includes fault-tolerant behavior:
+
+- If a tile fails to create, the error is logged to the console
+- The dashboard continues creating other tiles without crashing
+- Failed tiles are silently skipped and not included in the returned array
+
+**Example:**
+
+```javascript
+const configs = [
+  {
+    type: TileType.WIDGET,
+    config: { url: 'https://weather.com/widget' }
+  },
+  {
+    type: TileType.LINK,
+    config: { label: 'GitHub', url: 'https://github.com' }
+  }
+];
+
+const container = document.getElementById('dashboard');
+const tiles = TileFactory.createAll(configs, container);
+
+console.log(`Created ${tiles.length} tiles`);
+```
+
+## Supported Tile Types
+
+The factory supports the following tile types:
+
+- `TileType.WIDGET` → WidgetTile
+- `TileType.WEBHOOK` → WebhookTile
+- `TileType.BUTTON` → ButtonTile
+- `TileType.TOGGLE` → ToggleTile
+- `TileType.LINK` → LinkTile
+- `TileType.APPLICATION` → ApplicationTile
+
+See [TileType](/api/tile-types) for the complete list of constants.
+
+## Source Reference
+
+**File:** `source/core/TileFactory.js:10-44`

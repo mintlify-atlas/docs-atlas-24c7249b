@@ -1,0 +1,457 @@
+---
+title: Installation
+description: Deploy ZeroDash to a web server, reverse proxy, or static hosting platform
+---
+
+## Prerequisites
+
+ZeroDash has minimal requirements:
+
+- A web server capable of serving static files
+- A modern web browser (Chrome, Firefox, Safari, Edge)
+- Your homelab services accessible from the client browser
+
+<Note>
+  **No backend required.** ZeroDash runs entirely in the browser. The web server only needs to serve static HTML, CSS, and JavaScript files.
+</Note>
+
+## Download ZeroDash
+
+<Tabs>
+  <Tab title="Git clone">
+    Clone the repository:
+    
+    ```bash
+    git clone https://github.com/ujwalnk/zerodash.git
+    cd zerodash
+    ```
+    
+    This method makes it easy to pull updates:
+    
+    ```bash
+    git pull origin main
+    ```
+  </Tab>
+  
+  <Tab title="Download ZIP">
+    Download the latest release from GitHub:
+    
+    1. Visit the [ZeroDash repository](https://github.com/ujwalnk/zerodash)
+    2. Click **Code** > **Download ZIP**
+    3. Extract the archive to your preferred location
+  </Tab>
+</Tabs>
+
+## File structure
+
+After downloading, you'll have this structure:
+
+```
+zerodash/
+├── index.html          # Main HTML file
+├── main.js             # Application entry point  
+├── style.css           # Global styles
+├── core/               # Core engine (do not modify)
+│   ├── layoutSelector.js
+│   ├── renderer.js
+│   ├── search.js
+│   ├── TileFactory.js
+│   └── tiles/
+├── widgets/            # Tile rendering widgets
+├── user/               # Your configuration (gitignored)
+│   ├── config.js       # Create this file
+│   └── searchConfig.js # Create this file
+└── icons/              # Your icons (gitignored)
+```
+
+<Warning>
+  Do not modify files in the `core/` directory. Your customizations belong in the `user/` directory.
+</Warning>
+
+## Create your configuration
+
+ZeroDash requires a configuration file at `user/config.js`:
+
+<Steps>
+  <Step title="Create the user directory">
+    ```bash
+    mkdir -p user
+    ```
+  </Step>
+  
+  <Step title="Create config.js">
+    ```bash
+    touch user/config.js
+    ```
+  </Step>
+  
+  <Step title="Add your configuration">
+    See the [Quickstart](/quickstart) for a complete example configuration.
+    
+    Minimal example:
+    
+    ```javascript user/config.js
+    export const dashboardConfig = {
+      layouts: [
+        {
+          name: "default",
+          rows: 3,
+          columns: 3,
+          tiles: []
+        }
+      ]
+    };
+    ```
+  </Step>
+</Steps>
+
+## Deployment options
+
+### Local development server
+
+For testing and development, use any static file server:
+
+<CodeGroup>
+```bash Python
+python -m http.server 8080
+```
+
+```bash Node.js
+npx serve -p 8080
+```
+
+```bash PHP
+php -S localhost:8080
+```
+</CodeGroup>
+
+Then navigate to `http://localhost:8080`.
+
+### Nginx
+
+Deploy ZeroDash with Nginx as a reverse proxy:
+
+<Steps>
+  <Step title="Copy files to web root">
+    ```bash
+    sudo cp -r zerodash /var/www/dashboard
+    ```
+  </Step>
+  
+  <Step title="Create Nginx configuration">
+    ```nginx /etc/nginx/sites-available/dashboard
+    server {
+      listen 80;
+      server_name dashboard.local;
+      
+      root /var/www/dashboard;
+      index index.html;
+      
+      location / {
+        try_files $uri $uri/ /index.html;
+      }
+      
+      # Cache static assets
+      location ~* \.(css|js|png|jpg|jpeg|gif|svg|ico)$ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Enable the site">
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/dashboard /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl reload nginx
+    ```
+  </Step>
+</Steps>
+
+### Apache
+
+Deploy with Apache:
+
+<Steps>
+  <Step title="Copy files to web root">
+    ```bash
+    sudo cp -r zerodash /var/www/html/dashboard
+    ```
+  </Step>
+  
+  <Step title="Create .htaccess">
+    ```apache /var/www/html/dashboard/.htaccess
+    # Enable rewrite engine
+    RewriteEngine On
+    
+    # Rewrite all requests to index.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+    
+    # Cache static assets
+    <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|ico)$">
+      Header set Cache-Control "max-age=604800, public"
+    </FilesMatch>
+    ```
+  </Step>
+  
+  <Step title="Restart Apache">
+    ```bash
+    sudo systemctl restart apache2
+    ```
+  </Step>
+</Steps>
+
+### Docker (Static Server)
+
+Run ZeroDash in a Docker container:
+
+<CodeGroup>
+```dockerfile Dockerfile
+FROM nginx:alpine
+
+COPY . /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+```bash Build and Run
+# Build the image
+docker build -t zerodash .
+
+# Run the container
+docker run -d -p 8080:80 --name zerodash zerodash
+```
+
+```yaml docker-compose.yml
+version: '3.8'
+
+services:
+  zerodash:
+    image: nginx:alpine
+    container_name: zerodash
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/usr/share/nginx/html:ro
+    restart: unless-stopped
+```
+</CodeGroup>
+
+### Static hosting platforms
+
+Deploy to cloud static hosting:
+
+<Tabs>
+  <Tab title="GitHub Pages">
+    <Steps>
+      <Step title="Create a repository">
+        Initialize a git repository and push to GitHub
+      </Step>
+      
+      <Step title="Enable GitHub Pages">
+        1. Go to repository **Settings** > **Pages**
+        2. Select branch: `main`
+        3. Select folder: `/` (root)
+        4. Click **Save**
+      </Step>
+      
+      <Step title="Access your dashboard">
+        Your dashboard will be available at:
+        
+        `https://<username>.github.io/<repository>/`
+      </Step>
+    </Steps>
+    
+    <Warning>
+      Your configuration files in `user/` are gitignored. You'll need to manually create them in the repository or commit them separately.
+    </Warning>
+  </Tab>
+  
+  <Tab title="Cloudflare Pages">
+    <Steps>
+      <Step title="Push to Git">
+        Push your ZeroDash directory to GitHub, GitLab, or Bitbucket
+      </Step>
+      
+      <Step title="Create Cloudflare Pages project">
+        1. Log in to Cloudflare dashboard
+        2. Go to **Pages** > **Create a project**
+        3. Connect your Git repository
+      </Step>
+      
+      <Step title="Configure build settings">
+        - Build command: (leave empty)
+        - Build output directory: `/`
+        - Root directory: `/`
+      </Step>
+      
+      <Step title="Deploy">
+        Cloudflare will automatically build and deploy
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Netlify">
+    <Steps>
+      <Step title="Push to Git">
+        Push your ZeroDash directory to GitHub, GitLab, or Bitbucket
+      </Step>
+      
+      <Step title="Create Netlify site">
+        1. Log in to Netlify
+        2. Click **Add new site** > **Import an existing project**
+        3. Connect your Git repository
+      </Step>
+      
+      <Step title="Configure build settings">
+        - Build command: (leave empty)
+        - Publish directory: `/`
+      </Step>
+      
+      <Step title="Deploy">
+        Netlify will automatically deploy your site
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## HTTPS and reverse proxy
+
+If your homelab services use HTTPS, you may need to serve ZeroDash over HTTPS to avoid mixed content warnings.
+
+### Caddy (automatic HTTPS)
+
+Caddy automatically provisions TLS certificates:
+
+<CodeGroup>
+```caddyfile Caddyfile
+dashboard.local {
+  root * /var/www/dashboard
+  file_server
+  
+  # Enable gzip compression
+  encode gzip
+  
+  # SPA routing
+  try_files {path} /index.html
+}
+```
+
+```bash Run Caddy
+caddy run --config Caddyfile
+```
+</CodeGroup>
+
+### Nginx with Let's Encrypt
+
+Use Certbot to provision certificates:
+
+```bash
+sudo certbot --nginx -d dashboard.yourdomain.com
+```
+
+Certbot will automatically update your Nginx configuration.
+
+## Updating ZeroDash
+
+To update to the latest version:
+
+<Steps>
+  <Step title="Backup your configuration">
+    ```bash
+    cp -r user/ user.backup/
+    ```
+  </Step>
+  
+  <Step title="Pull latest changes">
+    If using git:
+    
+    ```bash
+    git pull origin main
+    ```
+    
+    Or download and extract the latest release.
+  </Step>
+  
+  <Step title="Restore your configuration">
+    Your `user/` directory is gitignored, so it won't be overwritten. If it was removed, restore from backup:
+    
+    ```bash
+    cp -r user.backup/* user/
+    ```
+  </Step>
+  
+  <Step title="Clear browser cache">
+    Hard refresh your browser: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (macOS)
+  </Step>
+</Steps>
+
+<Note>
+  ZeroDash follows semantic versioning. Updates to the `core/` directory will not break existing configurations unless there's a major version bump.
+</Note>
+
+## Troubleshooting
+
+### Configuration errors
+
+If you see a "Fatal Error" message:
+
+1. Open browser DevTools (F12)
+2. Check the Console tab for detailed validation errors
+3. Common issues:
+   - Missing `user/config.js` file
+   - Invalid JavaScript syntax in config
+   - Tile positioned outside the grid bounds
+   - Unknown tile type or configuration keys
+
+### Module import errors
+
+If you see `SyntaxError: Cannot use import statement outside a module`:
+
+- Ensure your web server serves `.js` files with the correct MIME type (`text/javascript`)
+- Check that `index.html` loads `main.js` with `type="module"`:
+  ```html
+  <script type="module" src="./main.js"></script>
+  ```
+
+### CORS errors for status checks
+
+If availability checks fail with CORS errors:
+
+- Ensure your services send proper CORS headers
+- Consider using a reverse proxy to handle CORS
+- Remove `availabilityUrl` if you can't configure CORS
+
+### Layout not loading
+
+If your layout doesn't appear:
+
+1. Check the developer overlay (visible by default) shows the correct layout name
+2. Verify your media queries are valid CSS
+3. Check that at least one layout has no `mediaQuery` (fallback)
+4. Test layout selection with URL override: `http://localhost:8080?layout=desktop`
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration overview" icon="gear" href="/configuration/overview">
+    Learn about all configuration options
+  </Card>
+  
+  <Card title="Responsive layouts" icon="mobile" href="/features/responsive-layouts">
+    Create layouts for different screen sizes
+  </Card>
+  
+  <Card title="Layout URLs" icon="link" href="/advanced/layout-urls">
+    Override layouts with URL parameters
+  </Card>
+  
+  <Card title="Deployment" icon="server" href="/advanced/deployment">
+    Advanced deployment strategies
+  </Card>
+</CardGroup>

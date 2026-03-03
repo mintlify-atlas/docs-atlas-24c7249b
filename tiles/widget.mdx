@@ -1,0 +1,220 @@
+---
+title: "Widget Tile"
+description: "Embed external content via iframe with automatic refresh"
+---
+
+The Widget tile type embeds external web content using an iframe. It supports automatic periodic refreshing, making it ideal for displaying dashboards, monitoring tools, or any web-based content within your ZeroDash interface.
+
+## Configuration
+
+Widget tiles support the following configuration options:
+
+<ParamField path="url" type="string" required>
+  The URL of the web page or application to embed in the iframe.
+  
+  ```json
+  "url": "https://grafana.company.com/dashboard/overview"
+  ```
+</ParamField>
+
+<ParamField path="RefreshInterval" type="number" required>
+  The refresh interval in seconds. Must be a non-negative number.
+  
+  - Set to `0` to disable automatic refresh
+  - Set to any positive number to enable periodic refresh
+  
+  The iframe content will reload every N seconds.
+  
+  ```json
+  "RefreshInterval": 30
+  ```
+</ParamField>
+
+## Behavior
+
+### Iframe Rendering
+
+The widget tile creates a borderless iframe that:
+
+- Fills 100% width and height of the tile
+- Has no border for seamless integration
+- Loads the specified URL immediately
+
+### Automatic Refresh
+
+When `RefreshInterval` is greater than 0:
+
+- A timer starts when the tile is rendered
+- Every N seconds (where N is `RefreshInterval`), the iframe reloads
+- The refresh forces a complete reload of the iframe content
+- The refresh interval is cleared when the tile is destroyed
+
+### Lifecycle Management
+
+The WidgetTile class implements a `destroy()` method that:
+
+- Clears the refresh interval when the tile is removed
+- Prevents memory leaks from orphaned timers
+- Is called automatically when the tile is removed from the DOM
+
+## Example Configurations
+
+### Static Dashboard
+
+```json
+{
+  "type": "widget",
+  "layout": {
+    "x": 0,
+    "y": 0,
+    "width": 4,
+    "height": 3
+  },
+  "config": {
+    "url": "https://grafana.company.com/d/system-overview",
+    "RefreshInterval": 0
+  }
+}
+```
+
+This embeds a Grafana dashboard without automatic refresh. Users can interact with the dashboard normally.
+
+### Auto-Refreshing Monitor
+
+```json
+{
+  "type": "widget",
+  "layout": {
+    "x": 4,
+    "y": 0,
+    "width": 2,
+    "height": 2
+  },
+  "config": {
+    "url": "https://status.company.com/services",
+    "RefreshInterval": 60
+  }
+}
+```
+
+This embeds a status page that refreshes every 60 seconds to show the latest service health.
+
+### High-Frequency Updates
+
+```json
+{
+  "type": "widget",
+  "layout": {
+    "x": 0,
+    "y": 3,
+    "width": 3,
+    "height": 2
+  },
+  "config": {
+    "url": "https://monitoring.company.com/live-metrics",
+    "RefreshInterval": 5
+  }
+}
+```
+
+This refreshes every 5 seconds for near-real-time monitoring data.
+
+## Validation Rules
+
+The WidgetTile class enforces these validation rules:
+
+- `url` must be a non-empty string
+- `RefreshInterval` must be a number greater than or equal to 0
+- No unknown configuration keys are allowed
+
+## Iframe Considerations
+
+### Cross-Origin Restrictions
+
+The embedded content must allow iframe embedding:
+
+- Some sites block iframe embedding with `X-Frame-Options` headers
+- Use `Content-Security-Policy: frame-ancestors` to control which sites can embed your content
+- If the target URL blocks iframes, the widget will show an error or blank content
+
+### Security
+
+Widget tiles create iframes without sandbox restrictions:
+
+- The embedded content runs with full privileges
+- Only embed trusted URLs
+- Consider using the sandbox attribute if you need to embed untrusted content
+
+### Performance
+
+Frequent refresh intervals can impact performance:
+
+- Each refresh reloads the entire page
+- Consider the network and CPU impact of your refresh interval
+- For static content, use `RefreshInterval: 0`
+- For real-time data, consider using WebSocket-based dashboards instead
+
+## Common Use Cases
+
+### Monitoring Dashboards
+
+Embed Grafana, Datadog, or custom monitoring dashboards:
+
+```json
+{
+  "config": {
+    "url": "https://grafana.company.com/d/kubernetes-cluster",
+    "RefreshInterval": 30
+  }
+}
+```
+
+### Status Pages
+
+Display service status with automatic updates:
+
+```json
+{
+  "config": {
+    "url": "https://status.company.com",
+    "RefreshInterval": 120
+  }
+}
+```
+
+### Documentation
+
+Embed documentation without refresh:
+
+```json
+{
+  "config": {
+    "url": "https://docs.company.com/quick-reference",
+    "RefreshInterval": 0
+  }
+}
+```
+
+### Analytics
+
+Show analytics dashboards with periodic updates:
+
+```json
+{
+  "config": {
+    "url": "https://analytics.company.com/dashboard/today",
+    "RefreshInterval": 300
+  }
+}
+```
+
+## Comparison with Webhook Tiles
+
+| Feature | Widget Tile | Webhook Tile |
+|---------|-------------|---------------|
+| Content rendering | iframe | innerHTML |
+| JavaScript execution | Full (isolated) | Full (same context) |
+| Automatic refresh | Configurable interval | None |
+| Click behavior | Interactive iframe | Triggers webhook |
+| Cross-origin | Restricted by CORS | Unrestricted |
+| Use case | Full applications | HTML snippets |

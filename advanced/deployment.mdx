@@ -1,0 +1,583 @@
+---
+title: Deployment
+description: Deploy your ZeroDash dashboard to static hosting platforms with configuration examples for popular providers
+---
+
+ZeroDash is a static site that requires no backend infrastructure. Simply build your dashboard and deploy the generated files to any static hosting service.
+
+## Build Process
+
+ZeroDash uses Vite for building. The build process:
+
+1. Bundles JavaScript modules into optimized chunks
+2. Processes CSS and assets
+3. Generates a production-ready static site in the `dist/` directory
+
+### Building Your Dashboard
+
+```bash
+# Install dependencies
+npm install
+
+# Build for production
+npm run build
+```
+
+This creates a `dist/` directory with:
+
+```
+dist/
+├── index.html           # Main HTML file
+├── assets/
+│   ├── index-[hash].js  # Bundled JavaScript
+│   ├── index-[hash].css # Bundled CSS
+│   └── ...              # Other assets
+└── ...                  # Additional static files
+```
+
+### Preview Before Deployment
+
+Test the production build locally:
+
+```bash
+npm run preview
+```
+
+This serves the `dist/` directory on a local server (typically `http://localhost:4173`).
+
+## Server Configuration
+
+For [Layout URL](/advanced/layout-urls) support, configure your server to serve `index.html` for all routes.
+
+### Why This Is Needed
+
+ZeroDash uses client-side routing for layout URLs like `/mobile` or `/layout/desktop`. Without proper server configuration:
+
+- ❌ Direct navigation to `/mobile` returns 404
+- ❌ Refreshing the page on `/mobile` breaks
+- ✅ Query parameters `?layout=mobile` work without special config
+
+### Configuration Examples
+
+#### Nginx
+
+```nginx
+server {
+    listen 80;
+    server_name your-dashboard.com;
+    root /var/www/zerodash/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Optional: Cache static assets
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}
+```
+
+#### Apache
+
+Create `.htaccess` in your `dist/` directory:
+
+```apache
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
+
+# Optional: Cache static assets
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/svg+xml "access plus 1 year"
+</IfModule>
+```
+
+#### Node.js (Express)
+
+```javascript
+const express = require('express');
+const path = require('path');
+const app = express();
+
+const distDir = path.join(__dirname, 'dist');
+
+// Serve static files
+app.use(express.static(distDir, {
+  maxAge: '1y',
+  immutable: true,
+  index: false // Don't auto-serve index.html
+}));
+
+// SPA fallback: serve index.html for all routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distDir, 'index.html'));
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Dashboard running on http://localhost:${PORT}`);
+});
+```
+
+#### Python (Flask)
+
+```python
+from flask import Flask, send_from_directory
+import os
+
+app = Flask(__name__)
+dist_dir = os.path.join(os.getcwd(), 'dist')
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    # Serve file if it exists
+    if path and os.path.exists(os.path.join(dist_dir, path)):
+        return send_from_directory(dist_dir, path)
+    # Otherwise serve index.html (SPA fallback)
+    return send_from_directory(dist_dir, 'index.html')
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=3000)
+```
+
+## Static Hosting Platforms
+
+ZeroDash works with any static hosting service. Here are configurations for popular platforms:
+
+### Netlify
+
+Create `netlify.toml` in your project root:
+
+```toml
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Redirect all routes to index.html for client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Optional: Cache static assets
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+```
+
+**Deploy:**
+
+```bash
+# Install Netlify CLI
+npm install -g netlify-cli
+
+# Deploy
+netlify deploy --prod
+```
+
+Or connect your Git repository in the Netlify dashboard for automatic deployments.
+
+### Vercel
+
+Create `vercel.json` in your project root:
+
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Deploy:**
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy
+vercel --prod
+```
+
+Or connect your Git repository in the Vercel dashboard.
+
+### GitHub Pages
+
+GitHub Pages requires special handling for client-side routing.
+
+**Option 1: Hash Router (Recommended for GitHub Pages)**
+
+Use query parameters instead of path-based URLs:
+
+```
+# Works without configuration
+https://username.github.io/zerodash?layout=mobile
+```
+
+**Option 2: 404.html Redirect Hack**
+
+Create a `404.html` file in your `dist/` directory:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <script>
+    // Redirect to index.html with path as query parameter
+    const path = window.location.pathname;
+    if (path !== '/') {
+      window.location.replace(
+        window.location.origin + '?redirect=' + path
+      );
+    }
+  </script>
+</head>
+<body></body>
+</html>
+```
+
+Then modify your `source/core/layoutSelector.js` to check for the redirect parameter.
+
+**Deploy with GitHub Actions:**
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run build
+      - uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+```
+
+### Cloudflare Pages
+
+**Configuration in Cloudflare Dashboard:**
+
+- Build command: `npm run build`
+- Build output directory: `dist`
+
+Cloudflare Pages automatically handles SPA routing.
+
+**Or use Wrangler CLI:**
+
+```bash
+# Install Wrangler
+npm install -g wrangler
+
+# Deploy
+wrangler pages publish dist
+```
+
+### AWS S3 + CloudFront
+
+**1. Upload to S3:**
+
+```bash
+aws s3 sync dist/ s3://your-bucket-name --delete
+```
+
+**2. Configure S3 bucket for static hosting:**
+
+- Enable static website hosting
+- Set index document: `index.html`
+- Set error document: `index.html` (SPA fallback)
+
+**3. Configure CloudFront distribution:**
+
+Create a custom error response:
+
+- HTTP Error Code: `404`
+- TTL: `0`
+- Custom Error Response: Yes
+- Response Page Path: `/index.html`
+- HTTP Response Code: `200`
+
+This ensures all routes serve `index.html` while returning a 200 status.
+
+### DigitalOcean App Platform
+
+Create `.do/app.yaml` in your project root:
+
+```yaml
+name: zerodash
+services:
+  - name: web
+    github:
+      repo: your-username/your-repo
+      branch: main
+      deploy_on_push: true
+    build_command: npm run build
+    output_dir: dist
+    routes:
+      - path: /
+    static_sites:
+      - catchall_document: index.html
+```
+
+## Environment Variables
+
+If your dashboard uses environment variables:
+
+### Vite Environment Variables
+
+Create `.env` file:
+
+```bash
+VITE_API_URL=https://api.example.com
+VITE_ANALYTICS_ID=GA-123456789
+```
+
+Access in code:
+
+```javascript
+const apiUrl = import.meta.env.VITE_API_URL;
+```
+
+### Platform-Specific Setup
+
+**Netlify:** Add environment variables in dashboard under Site settings → Environment variables
+
+**Vercel:** Add environment variables in dashboard under Settings → Environment Variables
+
+**GitHub Actions:**
+
+```yaml
+- run: npm run build
+  env:
+    VITE_API_URL: ${{ secrets.API_URL }}
+```
+
+## Performance Optimization
+
+### Asset Caching
+
+Configure long cache times for hashed assets:
+
+```nginx
+# Nginx example
+location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+}
+```
+
+### Compression
+
+Enable gzip/brotli compression:
+
+```nginx
+# Nginx
+gzip on;
+gzip_types text/css application/javascript image/svg+xml;
+gzip_min_length 256;
+
+brotli on;
+brotli_types text/css application/javascript image/svg+xml;
+```
+
+### CDN Delivery
+
+Use a CDN for global distribution:
+
+- **Cloudflare:** Proxy through Cloudflare DNS
+- **AWS CloudFront:** Create distribution pointing to S3 bucket
+- **Netlify/Vercel:** Built-in global CDN
+
+## Security
+
+### HTTPS
+
+Always use HTTPS in production. Most platforms provide free SSL:
+
+- Netlify: Automatic Let's Encrypt SSL
+- Vercel: Automatic SSL
+- Cloudflare Pages: Automatic SSL
+- GitHub Pages: Automatic SSL for custom domains
+
+### Security Headers
+
+Add security headers to your server configuration:
+
+```nginx
+# Nginx
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-XSS-Protection "1; mode=block" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+```
+
+Or use platform-specific configurations:
+
+```toml
+# netlify.toml
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+```
+
+## Monitoring
+
+### Error Tracking
+
+Integrate error tracking services:
+
+```javascript
+// Example: Sentry integration
+import * as Sentry from "@sentry/browser";
+
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  environment: import.meta.env.MODE
+});
+```
+
+### Analytics
+
+Add analytics to track usage:
+
+```javascript
+// Example: Google Analytics
+if (import.meta.env.VITE_GA_ID) {
+  const script = document.createElement('script');
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${import.meta.env.VITE_GA_ID}`;
+  document.head.appendChild(script);
+}
+```
+
+## Continuous Deployment
+
+Automate deployments with Git:
+
+### Netlify/Vercel
+
+1. Connect Git repository in dashboard
+2. Configure build settings
+3. Push to main branch → automatic deployment
+
+### GitHub Actions to S3
+
+```yaml
+name: Deploy to S3
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - run: npm ci
+      - run: npm run build
+      - uses: jakejarvis/s3-sync-action@master
+        with:
+          args: --delete
+        env:
+          AWS_S3_BUCKET: ${{ secrets.AWS_S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          SOURCE_DIR: 'dist'
+```
+
+## Troubleshooting
+
+### 404 on Layout URLs
+
+**Problem:** Direct navigation to `/mobile` returns 404
+
+**Solution:** Configure server to serve `index.html` for all routes (see [Server Configuration](#server-configuration))
+
+### Blank Page After Deployment
+
+**Problem:** Dashboard shows blank page in production
+
+**Checks:**
+1. Open browser console for JavaScript errors
+2. Verify `dist/` directory was uploaded correctly
+3. Check that asset paths are correct (should be relative)
+4. Confirm base URL in Vite config if using subdirectory
+
+### Assets Not Loading
+
+**Problem:** CSS/JS files return 404
+
+**Solution:** Check that the build output directory is correct:
+
+```javascript
+// vite.config.js
+export default {
+  build: {
+    outDir: 'dist' // Must match deployment configuration
+  }
+}
+```
+
+### Base URL Issues (Subdirectory Deployments)
+
+**Problem:** Deploying to `https://example.com/dashboard/` instead of root
+
+**Solution:** Set base URL in Vite config:
+
+```javascript
+// vite.config.js
+export default {
+  base: '/dashboard/' // Must include trailing slash
+}
+```
+
+## Related
+
+- [Layout URLs](/advanced/layout-urls) - URL routing configuration
+- [Developer Overlay](/advanced/developer-overlay) - Development tools
+- [Installation](/installation) - Setup and local development

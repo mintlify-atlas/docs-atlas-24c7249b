@@ -1,0 +1,274 @@
+---
+title: "Command Palette Search"
+description: "Global keyboard-driven search for quick access to all dashboard actions"
+---
+
+ZeroDash includes a command-palette style search engine that lets you instantly find and execute any action on your dashboard without clicking through tiles.
+
+## How It Works
+
+The search engine runs a **state machine** with five states:
+
+- **IDLE**: No overlay visible, normal dashboard behavior
+- **OPENING**: Triggered by first printable key, overlay created, input focused
+- **ACTIVE**: User typing, results updating, keyboard navigation active
+- **EXECUTING**: Result chosen, action performed, no further input
+- **DISMISSING**: Overlay removed, state reset, return to IDLE
+
+## Opening Search
+
+Press **any printable character** to instantly open the search overlay. The character you type becomes the first character in your search query.
+
+```javascript
+// Search triggers automatically when:
+// - Any printable key is pressed
+// - No input field is currently focused
+// - Not holding Ctrl/Cmd/Alt modifiers
+```
+
+The search does **not** activate when:
+- You're typing in an input field
+- You're inside a textarea or contenteditable element
+- You're interacting with an iframe
+- You're using keyboard modifiers (Ctrl, Cmd, Alt)
+
+## Keyboard Navigation
+
+| Key | Action |
+|-----|--------|
+| Any character | Open search (from IDLE state) |
+| Type letters | Filter results |
+| `↓` Arrow Down | Select next result |
+| `↑` Arrow Up | Select previous result |
+| `Enter` | Execute selected result |
+| `Esc` | Close search overlay |
+
+## Prefix Shortcuts
+
+Use prefix characters to filter results by tile type:
+
+```javascript
+// Default prefix configuration
+'@' → applications only
+'#' → applications and links
+'/' → buttons only
+'.' → toggles only
+```
+
+### Examples
+
+```
+@plex          # Search applications only for "plex"
+#documentation # Search apps and links for "documentation"
+/restart       # Search buttons only for "restart"
+.lights        # Search toggles only for "lights"
+server         # Search all types for "server"
+```
+
+## What Gets Indexed
+
+The search engine indexes these tile types:
+
+- **Applications**: Clickable app launchers
+- **Links**: Navigation links
+- **Buttons**: Action buttons that trigger HTTP requests
+- **Toggles**: Binary state switches
+
+**Widgets are explicitly excluded** from search results.
+
+```javascript
+// From source/core/search.js:119-120
+const searchableTypes = ['application', 'link', 'button', 'toggle'];
+```
+
+Tiles must have a valid `label` property to be indexed. Tiles without labels are automatically skipped.
+
+## Search Behavior
+
+### Matching Algorithm
+
+```javascript
+// Text normalization for fuzzy matching:
+// 1. Convert to lowercase
+// 2. Remove all spaces
+// 3. Remove all punctuation
+
+// Examples:
+"Home Assistant" → "homeassistant"
+"Plex-Server"   → "plexserver"
+```
+
+Search uses **substring matching** - your query can appear anywhere in the normalized label:
+
+```
+Query: "plex"
+Matches: "Plex", "My Plex Server", "ComplexApp"
+
+Query: "home"
+Matches: "Home", "Homepage", "Smart Home"
+```
+
+### Result Sorting
+
+Results are sorted by:
+
+1. **Type priority** (applications first, then links, buttons, toggles)
+2. **Alphabetical order** (by label)
+
+```javascript
+// From source/core/search.js:431-436
+const typePriority = {
+  'application': 0,
+  'link': 1,
+  'button': 2,
+  'toggle': 3
+};
+```
+
+## Executing Actions
+
+When you select a result and press Enter:
+
+### Applications & Links
+
+```javascript
+// Opens URL based on target configuration
+window.open(config.url, config.target === 'new' ? '_blank' : '_self');
+```
+
+### Buttons
+
+```javascript
+// Executes HTTP request with configured method and payload
+const response = await fetch(url, {
+  method: method || 'GET',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+});
+```
+
+### Toggles
+
+```javascript
+// 1. Check current state via statusCheckUrl
+// 2. Determine target URL based on state
+// 3. Execute toggle action
+const toggleUrl = currentState ? targetUrl.falseUrl : targetUrl.trueUrl;
+```
+
+## Customizing Prefixes
+
+Edit `source/user/searchConfig.js` to customize prefix shortcuts:
+
+```javascript
+export const searchConfig = {
+  enabled: true,
+  
+  prefixes: {
+    '@': ['application'],          // @ = apps only
+    '#': ['application', 'link'],  // # = apps and links
+    '/': ['button'],               // / = buttons only
+    '.': ['toggle'],               // . = toggles only
+    '!': ['button', 'toggle'],     // Custom: ! = actions only
+  }
+};
+```
+
+### Valid Tile Types
+
+```javascript
+const allowedTypes = ['application', 'link', 'button', 'toggle', 'widget'];
+```
+
+If you specify an invalid type, a warning is logged to the console and that prefix is removed.
+
+## Configuration Reference
+
+```javascript
+// source/user/searchConfig.js
+export const searchConfig = {
+  // Enable/disable search globally
+  enabled: true,
+  
+  // Define prefix shortcuts
+  // Key: single character prefix
+  // Value: array of tile types to include
+  prefixes: {
+    // Your custom prefixes here
+  }
+};
+```
+
+## Implementation Details
+
+### Search Index Building
+
+The search index is built once on initialization:
+
+```javascript
+// From source/core/search.js:78-98
+buildSearchIndex() {
+  this.searchIndex = [];
+  
+  for (const layout of this.dashboardConfig.layouts) {
+    for (const tile of layout.tiles) {
+      this.indexTile(tile);
+    }
+  }
+  
+  console.log(`[Search] Indexed ${this.searchIndex.length} searchable items`);
+}
+```
+
+All layouts are indexed, regardless of which layout is currently active. This means you can search across your entire dashboard configuration.
+
+### Result Rendering
+
+Each result shows:
+
+- **Icon**: From tile's `image` property (or `trueImage`/`falseImage` for toggles)
+- **Label**: The tile's display label
+- **Type badge**: "APP", "LINK", "BUTTON", or "TOGGLE"
+
+```javascript
+// From source/core/search.js:601-607
+getTileTypeLabel(type) {
+  const labels = {
+    'application': 'App',
+    'link': 'Link',
+    'button': 'Button',
+    'toggle': 'Toggle'
+  };
+  return labels[type] || type;
+}
+```
+
+### Preventing Duplicate Results
+
+Results are deduplicated using a combination of label + type:
+
+```javascript
+// From source/core/search.js:414-420
+const uniqueKey = `${item.label.toLowerCase()}|${item.type}`;
+
+if (!seen.has(uniqueKey)) {
+  seen.add(uniqueKey);
+  results.push(item);
+}
+```
+
+## Technical Reference
+
+**Source file**: `source/core/search.js:1-793`
+
+**Main class**: `SearchEngine`
+
+**Initialization**: `initSearch(dashboardConfig, searchConfig)`
+
+**DOM Classes**:
+- `.search-overlay` - Full-screen backdrop
+- `.search-container` - White modal box
+- `.search-input` - Text input field
+- `.search-results` - Scrollable results list
+- `.search-result` - Individual result item
+- `.search-result.selected` - Currently selected result

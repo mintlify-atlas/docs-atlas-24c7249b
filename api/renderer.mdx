@@ -1,0 +1,224 @@
+---
+title: renderLayout
+description: Render a layout configuration to a DOM container using CSS Grid
+---
+
+The `renderLayout` function takes a layout configuration object and renders it to a specified DOM container. It sets up a CSS Grid system and creates all tile instances using the TileFactory.
+
+## Function Signature
+
+```javascript
+function renderLayout(layout, container)
+```
+
+<ParamField path="layout" type="object" required>
+  The layout configuration object to render
+  
+  <ParamField path="layout.name" type="string" required>
+    The layout identifier. Must be a non-empty string.
+  </ParamField>
+  
+  <ParamField path="layout.rows" type="number" required>
+    Number of grid rows. Must be a positive number.
+  </ParamField>
+  
+  <ParamField path="layout.columns" type="number" required>
+    Number of grid columns. Must be a positive number.
+  </ParamField>
+  
+  <ParamField path="layout.tiles" type="array" required>
+    Array of tile configurations. Must be an array (can be empty).
+  </ParamField>
+  
+  <ParamField path="layout.mediaQuery" type="string">
+    Optional CSS media query string. If provided, must be a string.
+  </ParamField>
+</ParamField>
+
+<ParamField path="container" type="HTMLElement" required>
+  The DOM element where the layout will be rendered. All existing content will be cleared.
+</ParamField>
+
+## Behavior
+
+### 1. Validation
+
+The function performs strict validation before rendering:
+
+```javascript
+if (!layout || typeof layout !== 'object') {
+  throw new Error('Layout must be an object');
+}
+```
+
+Validation checks:
+- Layout must be a valid object
+- All required properties must be present and correct types
+- No unknown properties are allowed
+
+### 2. Container Clearing
+
+The container is completely cleared before rendering:
+
+```javascript
+container.innerHTML = '';
+```
+
+**Warning:** All existing content in the container will be removed.
+
+### 3. CSS Grid Setup
+
+The function configures the container as a CSS Grid:
+
+```javascript
+container.style.display = 'grid';
+container.style.gridTemplateRows = `repeat(${layout.rows}, 1fr)`;
+container.style.gridTemplateColumns = `repeat(${layout.columns}, 1fr)`;
+container.style.gap = '10px';
+container.style.width = '100%';
+container.style.height = '100%';
+```
+
+**Grid properties:**
+- Rows and columns use fractional units (`1fr`) for equal sizing
+- 10px gap between tiles
+- Container fills 100% width and height
+
+### 4. Tile Creation
+
+Tiles are created using the TileFactory:
+
+```javascript
+if (Array.isArray(layout.tiles)) {
+  TileFactory.createAll(layout.tiles, container);
+}
+```
+
+See [TileFactory.createAll()](/api/tile-factory#createall) for details on error handling.
+
+### 5. Text Fitting
+
+After tiles are rendered, text fitting is applied asynchronously:
+
+```javascript
+requestAnimationFrame(() => {
+  fitAllLabels(container);
+});
+```
+
+This ensures tile labels are properly sized after the DOM is fully laid out.
+
+## Validation Rules
+
+### Allowed Properties
+
+Only these properties are permitted in the layout object:
+
+- `name`
+- `mediaQuery`
+- `rows`
+- `columns`
+- `tiles`
+
+Any unknown properties will cause an error:
+
+```javascript
+throw new Error(`Unknown keys in layout: ${unknownKeys.join(', ')}`);
+```
+
+### Property Type Validation
+
+| Property | Validation | Error Message |
+|----------|------------|---------------|
+| `name` | Must be a non-empty string | `Layout must have a valid name string` |
+| `mediaQuery` | Must be a string if provided | `Layout mediaQuery must be a string if provided` |
+| `rows` | Must be a positive number | `Layout rows must be a positive number` |
+| `columns` | Must be a positive number | `Layout columns must be a positive number` |
+| `tiles` | Must be an array | `Layout tiles must be an array` |
+
+## Example Usage
+
+### Basic Rendering
+
+```javascript
+import { renderLayout } from './core/renderer.js';
+
+const layout = {
+  name: 'desktop',
+  rows: 4,
+  columns: 6,
+  tiles: [
+    {
+      type: 'button',
+      config: {
+        label: 'Deploy',
+        url: 'https://api.example.com/deploy',
+        row: 1,
+        column: 1,
+        rowSpan: 1,
+        columnSpan: 2
+      }
+    },
+    {
+      type: 'widget',
+      config: {
+        url: 'https://weather.com/widget',
+        row: 1,
+        column: 3,
+        rowSpan: 2,
+        columnSpan: 4
+      }
+    }
+  ]
+};
+
+const container = document.getElementById('dashboard');
+renderLayout(layout, container);
+```
+
+### With Media Query
+
+```javascript
+const mobileLayout = {
+  name: 'mobile',
+  mediaQuery: '(max-width: 768px)',
+  rows: 8,
+  columns: 2,
+  tiles: [/* ... */]
+};
+
+renderLayout(mobileLayout, container);
+```
+
+### Error Handling
+
+```javascript
+try {
+  renderLayout(layout, container);
+} catch (error) {
+  console.error('Failed to render layout:', error.message);
+  // Display fallback UI
+}
+```
+
+## Error Cases
+
+| Condition | Error Message |
+|-----------|---------------|
+| Layout is not an object | `Layout must be an object` |
+| Unknown properties | `Unknown keys in layout: <keys>` |
+| Invalid name | `Layout must have a valid name string` |
+| Invalid mediaQuery type | `Layout mediaQuery must be a string if provided` |
+| Invalid rows | `Layout rows must be a positive number` |
+| Invalid columns | `Layout columns must be a positive number` |
+| tiles not an array | `Layout tiles must be an array` |
+
+## Performance Considerations
+
+- Text fitting uses `requestAnimationFrame` to avoid layout thrashing
+- Tile creation failures don't stop the entire render (see TileFactory)
+- Container is cleared synchronously, so avoid frequent re-renders
+
+## Source Reference
+
+**File:** `source/core/renderer.js:4-63`

@@ -1,0 +1,340 @@
+---
+title: "Availability Monitoring"
+description: "Real-time monitoring of application health with automatic status checks"
+---
+
+ZeroDash automatically monitors the availability of all **Application** tiles by periodically checking their health and visually indicating when services are unreachable.
+
+## How It Works
+
+Every Application tile performs automatic availability checks:
+
+1. **Initial check**: Runs immediately after the tile renders
+2. **Periodic checks**: Repeat every **60 seconds**
+3. **Visual feedback**: Unreachable apps get the `.unreachable` CSS class
+4. **Timeout protection**: Each check times out after **3 seconds**
+
+```javascript
+// From source/widgets/application.js:76
+statusInterval = setInterval(checkAvailability, 60000);
+```
+
+## Check Mechanism
+
+### Default Behavior
+
+By default, ZeroDash checks availability by making a GET request to the same URL users click to open the application:
+
+```javascript
+// From source/widgets/application.js:27
+const checkUrl = availabilityUrl ?? url;
+```
+
+### Custom Availability URLs
+
+You can specify a separate endpoint for health checks using the `availabilityUrl` property:
+
+```json
+{
+  "type": "application",
+  "config": {
+    "label": "Jellyfin",
+    "url": "https://jellyfin.local",
+    "availabilityUrl": "https://jellyfin.local/health",
+    "image": "icons/jellyfin.png"
+  }
+}
+```
+
+This is useful when:
+- Your app's homepage is slow to load but has a fast `/health` endpoint
+- You want to check an API endpoint instead of the web UI
+- The main URL requires authentication but a status endpoint doesn't
+
+## The Check Function
+
+```javascript
+// From source/widgets/application.js:33-67
+const checkAvailability = async () => {
+  if (isChecking) {
+    return; // Prevent overlapping checks
+  }
+  
+  isChecking = true;
+  
+  try {
+    // Create AbortController for 3-second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
+    const response = await fetch(checkUrl, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      container.classList.remove('unreachable');
+    } else {
+      container.classList.add('unreachable');
+    }
+  } catch (error) {
+    // Error or timeout - mark unreachable
+    container.classList.add('unreachable');
+  } finally {
+    isChecking = false;
+  }
+};
+```
+
+## Status Indicators
+
+### CSS Class Application
+
+When an application is **reachable** (HTTP 200-299 response):
+```css
+/* No .unreachable class - tile appears normal */
+```
+
+When an application is **unreachable** (timeout, network error, or HTTP error):
+```css
+/* .unreachable class is added to the tile container */
+container.classList.add('unreachable');
+```
+
+### Styling Unreachable Apps
+
+Add custom styles in your CSS to visually distinguish unreachable applications:
+
+```css
+/* Example: Dim and desaturate unreachable apps */
+.tile.unreachable {
+  opacity: 0.4;
+  filter: grayscale(100%);
+  pointer-events: none; /* Prevent clicks */
+}
+
+/* Example: Red border for unreachable apps */
+.tile.unreachable {
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1);
+}
+
+/* Example: Add warning icon */
+.tile.unreachable::after {
+  content: "⚠️";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 20px;
+}
+```
+
+## Preventing Overlapping Checks
+
+The `isChecking` flag prevents multiple simultaneous checks:
+
+```javascript
+// From source/widgets/application.js:31-37
+let isChecking = false;
+
+const checkAvailability = async () => {
+  if (isChecking) {
+    return; // Skip this check if one is already running
+  }
+  isChecking = true;
+  // ... perform check ...
+  isChecking = false;
+};
+```
+
+This ensures:
+- Network resources aren't wasted on duplicate requests
+- Slow responses don't pile up
+- Visual state changes happen atomically
+
+## Timeout Handling
+
+Each check has a **3-second timeout** using the Fetch API's `AbortController`:
+
+```javascript
+// From source/widgets/application.js:42-44
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+const response = await fetch(checkUrl, {
+  signal: controller.signal
+});
+```
+
+If the request takes longer than 3 seconds:
+1. `controller.abort()` is called
+2. The fetch promise rejects
+3. The catch block runs
+4. The application is marked unreachable
+
+## Click Behavior
+
+**Important**: Clicking an application tile **always** navigates to `config.url`, never to `availabilityUrl`.
+
+```javascript
+// From source/widgets/application.js:78-85
+container.addEventListener('click', () => {
+  if (target === 'new') {
+    window.open(url, '_blank');  // Always uses config.url
+  } else {
+    window.location.href = url;
+  }
+});
+```
+
+The `availabilityUrl` is **only** used for health checks.
+
+## Cleanup on Removal
+
+When an application tile is removed from the DOM, its interval is automatically cleared:
+
+```javascript
+// From source/widgets/application.js:88-94
+const originalRemove = container.remove;
+container.remove = function() {
+  if (statusInterval) {
+    clearInterval(statusInterval);
+  }
+  originalRemove.call(this);
+};
+```
+
+This prevents:
+- Memory leaks from orphaned intervals
+- Unnecessary network requests after tiles are removed
+- Console errors from updating removed DOM elements
+
+## Configuration Examples
+
+### Basic Application (default availability check)
+
+```json
+{
+  "type": "application",
+  "config": {
+    "label": "Plex",
+    "url": "https://plex.local:32400",
+    "image": "icons/plex.png",
+    "target": "new"
+  }
+}
+```
+
+Checks: `https://plex.local:32400` every 60 seconds
+
+### Application with Custom Health Endpoint
+
+```json
+{
+  "type": "application",
+  "config": {
+    "label": "Sonarr",
+    "url": "https://sonarr.local",
+    "availabilityUrl": "https://sonarr.local/api/v3/health",
+    "image": "icons/sonarr.png"
+  }
+}
+```
+
+Checks: `https://sonarr.local/api/v3/health` every 60 seconds  
+Clicks: Navigate to `https://sonarr.local`
+
+### Application on Slow Network
+
+```json
+{
+  "type": "application",
+  "config": {
+    "label": "Remote Server",
+    "url": "https://slow-server.example.com",
+    "availabilityUrl": "https://slow-server.example.com/ping",
+    "image": "icons/server.png"
+  }
+}
+```
+
+Use a lightweight `/ping` endpoint to avoid timeout issues with slow-loading pages.
+
+## Network Conditions
+
+Availability checks handle various network conditions:
+
+| Condition | Result | Visual State |
+|-----------|--------|-------------|
+| HTTP 200-299 | Reachable | Normal |
+| HTTP 400-599 | Unreachable | `.unreachable` |
+| Network error | Unreachable | `.unreachable` |
+| Timeout (>3s) | Unreachable | `.unreachable` |
+| CORS error | Unreachable | `.unreachable` |
+
+## CORS Considerations
+
+If your applications are on different domains, you may encounter CORS (Cross-Origin Resource Sharing) errors during availability checks.
+
+### Problem
+
+```javascript
+// Browser blocks the request:
+// "Access to fetch at 'https://app.example.com' from origin 'https://dashboard.local' 
+//  has been blocked by CORS policy"
+```
+
+### Solutions
+
+1. **Configure CORS headers** on your application servers:
+   ```
+   Access-Control-Allow-Origin: https://dashboard.local
+   ```
+
+2. **Use a dedicated health endpoint** that allows CORS:
+   ```json
+   {
+     "availabilityUrl": "https://app.example.com/api/health"
+   }
+   ```
+
+3. **Proxy health checks** through your web server to avoid cross-origin requests
+
+4. **Accept CORS failures** as "unreachable" - this is the current behavior and may be acceptable if you don't need perfect availability monitoring
+
+## Performance Impact
+
+With `n` applications checking every 60 seconds:
+
+- **Network requests**: `n` requests per minute
+- **Timeout per request**: 3 seconds maximum
+- **Overlapping prevention**: Only 1 check per application at a time
+
+### Example Dashboard
+
+A dashboard with 10 applications:
+- 10 requests per minute = 1 request every 6 seconds (average)
+- If all requests succeed quickly: minimal network usage
+- If all requests timeout: 30 seconds of network activity per minute (3s × 10)
+
+## Technical Reference
+
+**Source file**: `source/widgets/application.js:1-97`
+
+**Function**: `renderApplication(container, config)`
+
+**Check interval**: 60000ms (60 seconds)
+
+**Check timeout**: 3000ms (3 seconds)
+
+**CSS class**: `.unreachable` (applied to tile container)
+
+**Config properties**:
+- `url` - Required. Application URL (also fallback for availability checks)
+- `availabilityUrl` - Optional. Custom health check endpoint
+- `label` - Required. Display name
+- `image` - Optional. Icon URL
+- `target` - Optional. `"new"` to open in new tab

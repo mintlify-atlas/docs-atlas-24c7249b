@@ -1,0 +1,140 @@
+---
+title: Introduction
+description: A lightweight, fully static homelab dashboard built with vanilla JavaScript
+---
+
+## What is ZeroDash?
+
+ZeroDash is a **lightweight, fully static homelab dashboard** designed for fast navigation to services and applications, with optional visual monitoring — all **without running a backend, database, or plugins**.
+
+It's a static replacement for dashboards like Homarr and Dashy, built with a different philosophy: keep the server simple, push intelligence to the browser, and remain easy to deploy and maintain long-term.
+
+<CardGroup cols={2}>
+  <Card title="Zero dependencies" icon="feather">
+    Built with vanilla JavaScript. No build tools, no npm packages, no framework lock-in.
+  </Card>
+  <Card title="Fully static" icon="file-code">
+    Deploy anywhere — GitHub Pages, S3, Nginx, or any static file server.
+  </Card>
+  <Card title="Smart browser" icon="browser">
+    Status checks, availability monitoring, and search run entirely in the browser.
+  </Card>
+  <Card title="Responsive layouts" icon="mobile">
+    Define multiple layouts with media queries for desktop, tablet, and mobile.
+  </Card>
+</CardGroup>
+
+## Key features
+
+### Grid-based layouts
+
+Define precise tile positions using a CSS Grid system. Each layout specifies rows and columns, and tiles declare their position and size.
+
+```javascript
+{
+  name: "desktop",
+  rows: 4,
+  columns: 6,
+  tiles: [
+    {
+      type: "application",
+      layout: { x: 0, y: 0, width: 2, height: 2 },
+      config: { label: "Jellyfin", url: "https://jellyfin.local" }
+    }
+  ]
+}
+```
+
+### Global search
+
+Press any key to open the command palette. Search across all tiles with prefix shortcuts:
+- `@` for applications
+- `#` for applications and links  
+- `/` for buttons
+- `.` for toggles
+
+### Availability monitoring
+
+Application and link tiles can monitor service availability with automatic status checks.
+
+### Tile types
+
+ZeroDash supports six tile types:
+
+<CardGroup cols={2}>
+  <Card title="Application" icon="grid-2" href="/tiles/application">
+    Navigate to your homelab services
+  </Card>
+  <Card title="Link" icon="link" href="/tiles/link">
+    External links with status monitoring
+  </Card>
+  <Card title="Button" icon="circle-play" href="/tiles/button">
+    Trigger webhooks and API calls
+  </Card>
+  <Card title="Toggle" icon="toggle-on" href="/tiles/toggle">
+    Switch between two states with visual feedback
+  </Card>
+  <Card title="Webhook" icon="webhook" href="/tiles/webhook">
+    Advanced HTTP request tiles
+  </Card>
+  <Card title="Widget" icon="puzzle-piece" href="/tiles/widget">
+    Custom embedded content
+  </Card>
+</CardGroup>
+
+## Getting started
+
+<Steps>
+  <Step title="Get the source">
+    Clone the ZeroDash repository or download the latest release
+    
+    ```bash
+    git clone https://github.com/ujwalnk/zerodash.git
+    ```
+  </Step>
+  
+  <Step title="Configure your dashboard">
+    Create your configuration file at `user/config.js`
+    
+    See the [Quickstart](/quickstart) for a working example
+  </Step>
+  
+  <Step title="Deploy">
+    Serve the directory with any static file server
+    
+    ```bash
+    python -m http.server 8080
+    ```
+  </Step>
+</Steps>
+
+<Card
+  title="Ready to build your dashboard?"
+  icon="rocket"
+  href="/quickstart"
+  horizontal
+>
+  Follow the quickstart guide to get your dashboard running in minutes.
+</Card>
+
+## Why ZeroDash?
+
+### Simple deployment
+
+No Docker containers, no databases, no background processes. Just HTML, CSS, and JavaScript files that you can deploy anywhere.
+
+### Long-term maintainability
+
+Built with web standards that won't change. No dependency updates, no breaking changes, no version conflicts.
+
+### Browser-first architecture
+
+All intelligence runs in the browser:
+- Status checks use the Fetch API
+- Search indexing happens on page load
+- Layout selection uses media queries
+- Text fitting uses DOM measurements
+
+### Configuration as code
+
+Your dashboard is defined in a single JavaScript configuration file that exports a simple object structure. Version control it, back it up, share it.

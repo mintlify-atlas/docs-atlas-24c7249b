@@ -1,0 +1,582 @@
+---
+title: "Tile Configuration"
+description: "Understanding tile structure, positioning, and common configuration patterns"
+---
+
+## Tile Structure
+
+Every tile in ZeroDash follows a consistent three-part structure. From `source/core/tiles/Tile.js:15-26`:
+
+```javascript
+{
+  type: string,      // Required: Tile type identifier
+  layout: object,    // Required: Grid positioning
+  config: object     // Required: Tile-specific configuration
+}
+```
+
+### Strict Validation
+
+From `source/core/tiles/Tile.js:20-26`, only these three keys are allowed:
+
+```javascript
+const allowedKeys = ['type', 'layout', 'config'];
+const keys = Object.keys(tileConfig);
+const unknownKeys = keys.filter(key => !allowedKeys.includes(key));
+
+if (unknownKeys.length > 0) {
+  throw new Error(`Unknown keys in tile config: ${unknownKeys.join(', ')}`);
+}
+```
+
+<Warning>
+Adding any keys outside of `type`, `layout`, and `config` will cause a validation error.
+</Warning>
+
+## Tile Type
+
+The `type` property determines which tile class is instantiated. From `source/core/TileFactory.js:10-26`:
+
+```javascript
+switch (tileConfig.type) {
+  case TileType.WIDGET:
+    return new WidgetTile(tileConfig);
+  case TileType.WEBHOOK:
+    return new WebhookTile(tileConfig);
+  case TileType.BUTTON:
+    return new ButtonTile(tileConfig);
+  case TileType.TOGGLE:
+    return new ToggleTile(tileConfig);
+  case TileType.LINK:
+    return new LinkTile(tileConfig);
+  case TileType.APPLICATION:
+    return new ApplicationTile(tileConfig);
+  default:
+    throw new Error(`Unknown tile type: ${tileConfig.type}`);
+}
+```
+
+### Available Types
+
+From `source/core/TileType.js:1-8`:
+
+```javascript
+export const TileType = Object.freeze({
+  WIDGET: "widget",
+  WEBHOOK: "webhook",
+  BUTTON: "button",
+  TOGGLE: "toggle",
+  LINK: "link",
+  APPLICATION: "application"
+});
+```
+
+<Tip>
+Always import and use `TileType` constants to avoid typos in configuration.
+</Tip>
+
+## Layout Property
+
+The `layout` object defines tile positioning within the grid. From `source/core/tiles/Tile.js:45-72`:
+
+```javascript
+{
+  x: number,       // Required: Column start position (>= 0)
+  y: number,       // Required: Row start position (>= 0)
+  width: number,   // Required: Columns to span (> 0)
+  height: number   // Required: Rows to span (> 0)
+}
+```
+
+### Position Coordinates
+
+#### x (Column Position)
+
+Zero-based horizontal position. `x: 0` is the leftmost column.
+
+```javascript
+layout: { x: 2, y: 0, width: 1, height: 1 }
+// Starts at 3rd column (0-indexed)
+```
+
+Validation from `source/core/tiles/Tile.js:58-60`:
+
+```javascript
+if (typeof layout.x !== 'number' || layout.x < 0) {
+  throw new Error('Layout x must be a non-negative number');
+}
+```
+
+#### y (Row Position)
+
+Zero-based vertical position. `y: 0` is the topmost row.
+
+```javascript
+layout: { x: 0, y: 1, width: 1, height: 1 }
+// Starts at 2nd row (0-indexed)
+```
+
+Validation from `source/core/tiles/Tile.js:62-64`:
+
+```javascript
+if (typeof layout.y !== 'number' || layout.y < 0) {
+  throw new Error('Layout y must be a non-negative number');
+}
+```
+
+### Size Properties
+
+#### width (Column Span)
+
+Number of columns the tile spans. Must be positive.
+
+```javascript
+layout: { x: 0, y: 0, width: 2, height: 1 }
+// Spans 2 columns
+```
+
+Validation from `source/core/tiles/Tile.js:66-68`:
+
+```javascript
+if (typeof layout.width !== 'number' || layout.width <= 0) {
+  throw new Error('Layout width must be a positive number');
+}
+```
+
+#### height (Row Span)
+
+Number of rows the tile spans. Must be positive.
+
+```javascript
+layout: { x: 0, y: 0, width: 1, height: 2 }
+// Spans 2 rows
+```
+
+Validation from `source/core/tiles/Tile.js:70-72`:
+
+```javascript
+if (typeof layout.height !== 'number' || layout.height <= 0) {
+  throw new Error('Layout height must be a positive number');
+}
+```
+
+### Grid Rendering
+
+From `source/core/tiles/Tile.js:75-82`, layout coordinates are converted to CSS Grid positioning:
+
+```javascript
+const tileElement = document.createElement('div');
+tileElement.className = 'tile';
+tileElement.style.gridColumn = `${this.x + 1} / ${this.x + 1 + this.width}`;
+tileElement.style.gridRow = `${this.y + 1} / ${this.y + 1 + this.height}`;
+```
+
+<Info>
+CSS Grid uses 1-based indexing, so coordinates are incremented by 1 during rendering.
+</Info>
+
+## Config Property
+
+The `config` object contains tile-specific configuration. Requirements vary by tile type.
+
+### Common Configuration Pattern
+
+Most interactive tiles share common properties:
+
+```javascript
+config: {
+  image: string,    // Optional: Icon URL
+  label: string,    // Required: Display text
+  url: string,      // Required: Target URL
+  // Type-specific properties...
+}
+```
+
+### Type-Specific Configurations
+
+#### Application Tile
+
+From `source/core/tiles/ApplicationTile.js:10-21`:
+
+```javascript
+const allowedKeys = ['image', 'label', 'url', 'target', 'availabilityUrl'];
+
+config: {
+  image: "https://example.com/icon.png",      // Optional
+  label: "Home Assistant",                    // Required
+  url: "https://homeassistant.local",         // Required
+  target: "new",                               // Optional: "new" | "same"
+  availabilityUrl: "https://api.local/health" // Optional
+}
+```
+
+Validation from `source/core/tiles/ApplicationTile.js:27-41`:
+
+```javascript
+if (typeof config.label !== 'string' || !config.label) {
+  throw new Error('ApplicationTile config must have a valid label string');
+}
+
+if (typeof config.url !== 'string' || !config.url) {
+  throw new Error('ApplicationTile config must have a valid url string');
+}
+
+if (config.target !== undefined && config.target !== 'new' && config.target !== 'same') {
+  throw new Error('ApplicationTile config target must be "new" or "same" if provided');
+}
+```
+
+#### Link Tile
+
+From `source/core/tiles/LinkTile.js:10-21`:
+
+```javascript
+const allowedKeys = ['image', 'label', 'url', 'target', 'statusCheckUrl'];
+
+config: {
+  image: "https://example.com/icon.png",  // Optional
+  label: "Documentation",                 // Required
+  url: "https://docs.example.com",        // Required
+  target: "new",                           // Required: "new" | "same"
+  statusCheckUrl: "https://api.local"     // Optional
+}
+```
+
+#### Button Tile
+
+From `source/core/tiles/ButtonTile.js:10-21`:
+
+```javascript
+const allowedKeys = ['image', 'label', 'url', 'method', 'payload'];
+
+config: {
+  image: "https://example.com/icon.png",  // Optional
+  label: "Deploy",                        // Required
+  url: "https://api.local/deploy",        // Required
+  method: "POST",                          // Required: "GET" | "POST"
+  payload: { branch: "main" }             // Optional: object
+}
+```
+
+Validation from `source/core/tiles/ButtonTile.js:35-37`:
+
+```javascript
+if (config.method !== 'GET' && config.method !== 'POST') {
+  throw new Error('ButtonTile config method must be GET or POST');
+}
+```
+
+#### Toggle Tile
+
+From `source/core/tiles/ToggleTile.js:10-21`:
+
+```javascript
+const allowedKeys = ['label', 'displayLabel', 'method', 'payload', 'targetUrl', 'statusCheckUrl', 'tag'];
+
+config: {
+  label: "Smart Light",                   // Required
+  displayLabel: true,                     // Required: boolean
+  method: "POST",                          // Required: "GET" | "POST"
+  payload: {},                             // Optional: object
+  targetUrl: {                             // Required: object
+    trueUrl: "https://api.local/on",
+    falseUrl: "https://api.local/off",
+    trueImage: "https://example.com/on.png",
+    falseImage: "https://example.com/off.png"
+  },
+  statusCheckUrl: "https://api.local/status", // Required
+  tag: "lights"                                // Optional: string
+}
+```
+
+Validation from `source/core/tiles/ToggleTile.js:39-65`:
+
+```javascript
+if (!config.targetUrl || typeof config.targetUrl !== 'object') {
+  throw new Error('ToggleTile config must have a targetUrl object');
+}
+
+if (typeof config.targetUrl.trueUrl !== 'string' || !config.targetUrl.trueUrl) {
+  throw new Error('ToggleTile targetUrl.trueUrl must be a valid string');
+}
+// Similar validation for falseUrl, trueImage, falseImage
+```
+
+#### Webhook Tile
+
+From `source/core/tiles/WebhookTile.js:10-21`:
+
+```javascript
+const allowedKeys = ['targetUrl', 'method', 'payload', 'statusCheckUrl'];
+
+config: {
+  targetUrl: "https://api.local/data",    // Required
+  method: "GET",                           // Required: "GET" | "POST"
+  payload: {},                             // Optional: object
+  statusCheckUrl: "https://api.local"     // Optional
+}
+```
+
+#### Widget Tile
+
+From `source/core/tiles/WidgetTile.js:9-20`:
+
+```javascript
+const allowedKeys = ['url', 'RefreshInterval'];
+
+config: {
+  url: "https://widget.example.com",      // Required
+  RefreshInterval: 30                      // Required: number >= 0 (seconds)
+}
+```
+
+Validation from `source/core/tiles/WidgetTile.js:26-28`:
+
+```javascript
+if (typeof config.RefreshInterval !== 'number' || config.RefreshInterval < 0) {
+  throw new Error('WidgetTile config must have RefreshInterval >= 0');
+}
+```
+
+<Note>
+Setting `RefreshInterval: 0` disables automatic refresh for widget tiles.
+</Note>
+
+## Complete Tile Examples
+
+### Application Tile
+
+```javascript
+{
+  type: TileType.APPLICATION,
+  layout: {
+    x: 0,
+    y: 0,
+    width: 2,
+    height: 2
+  },
+  config: {
+    image: "https://homeassistant.io/icon.png",
+    label: "Home Assistant",
+    url: "https://homeassistant.local:8123",
+    target: "new",
+    availabilityUrl: "https://homeassistant.local:8123/api/"
+  }
+}
+```
+
+### Button Tile with POST
+
+```javascript
+{
+  type: TileType.BUTTON,
+  layout: {
+    x: 2,
+    y: 0,
+    width: 1,
+    height: 1
+  },
+  config: {
+    label: "Deploy",
+    url: "https://api.example.com/deploy",
+    method: "POST",
+    payload: {
+      environment: "production",
+      branch: "main"
+    }
+  }
+}
+```
+
+### Toggle Tile
+
+```javascript
+{
+  type: TileType.TOGGLE,
+  layout: {
+    x: 0,
+    y: 2,
+    width: 1,
+    height: 1
+  },
+  config: {
+    label: "Office Light",
+    displayLabel: true,
+    method: "POST",
+    targetUrl: {
+      trueUrl: "https://homeassistant.local/api/services/light/turn_on",
+      falseUrl: "https://homeassistant.local/api/services/light/turn_off",
+      trueImage: "https://example.com/icons/light-on.png",
+      falseImage: "https://example.com/icons/light-off.png"
+    },
+    statusCheckUrl: "https://homeassistant.local/api/states/light.office",
+    tag: "office-automation"
+  }
+}
+```
+
+### Widget Tile with Auto-refresh
+
+```javascript
+{
+  type: TileType.WIDGET,
+  layout: {
+    x: 3,
+    y: 0,
+    width: 3,
+    height: 2
+  },
+  config: {
+    url: "https://grafana.local/dashboard/cpu",
+    RefreshInterval: 60  // Refresh every 60 seconds
+  }
+}
+```
+
+## Grid Layout Planning
+
+### Visualizing Coordinates
+
+For a 4x6 grid (4 rows, 6 columns):
+
+```
+     0   1   2   3   4   5  (columns)
+   +---+---+---+---+---+---+
+ 0 |   |   |   |   |   |   |
+   +---+---+---+---+---+---+
+ 1 |   |   |   |   |   |   |
+   +---+---+---+---+---+---+
+ 2 |   |   |   |   |   |   |
+   +---+---+---+---+---+---+
+ 3 |   |   |   |   |   |   |
+   +---+---+---+---+---+---+
+(rows)
+```
+
+### Multi-cell Tile Example
+
+A tile spanning 2 columns and 2 rows:
+
+```javascript
+layout: { x: 1, y: 1, width: 2, height: 2 }
+```
+
+```
+     0   1   2   3   4   5
+   +---+---+---+---+---+---+
+ 0 |   |   |   |   |   |   |
+   +---+---+---+---+---+---+
+ 1 |   |#######|   |   |   |
+   +---+   #   +---+---+---+
+ 2 |   |#######|   |   |   |
+   +---+---+---+---+---+---+
+ 3 |   |   |   |   |   |   |
+   +---+---+---+---+---+---+
+```
+
+## Error Handling
+
+From `source/core/TileFactory.js:29-44`, tile creation failures don't crash the dashboard:
+
+```javascript
+for (const tileConfig of tileConfigs) {
+  try {
+    const tile = TileFactory.create(tileConfig);
+    const element = tile.render(container);
+    tiles.push({ tile, element });
+  } catch (error) {
+    console.error('Failed to create tile:', error.message, tileConfig);
+    // Continue with other tiles - don't crash the dashboard
+  }
+}
+```
+
+<Tip>
+Invalid tile configurations are logged to the console but don't prevent other tiles from rendering.
+</Tip>
+
+## Best Practices
+
+### 1. Avoid Overlapping Tiles
+
+Ensure tiles don't occupy the same grid cells:
+
+```javascript
+// Bad - tiles overlap
+tiles: [
+  { layout: { x: 0, y: 0, width: 2, height: 1 }, ... },
+  { layout: { x: 1, y: 0, width: 2, height: 1 }, ... }  // Overlaps!
+]
+
+// Good - no overlap
+tiles: [
+  { layout: { x: 0, y: 0, width: 2, height: 1 }, ... },
+  { layout: { x: 2, y: 0, width: 2, height: 1 }, ... }
+]
+```
+
+### 2. Stay Within Grid Bounds
+
+Ensure `x + width <= columns` and `y + height <= rows`:
+
+```javascript
+// For a 4x6 grid (4 rows, 6 columns)
+
+// Bad - exceeds grid
+layout: { x: 5, y: 0, width: 2, height: 1 }  // 5 + 2 = 7 > 6 columns
+
+// Good - within bounds
+layout: { x: 4, y: 0, width: 2, height: 1 }  // 4 + 2 = 6 columns
+```
+
+### 3. Use Semantic Tile Sizes
+
+Larger tiles for primary content, smaller for quick actions:
+
+```javascript
+tiles: [
+  // Large primary service
+  {
+    type: TileType.APPLICATION,
+    layout: { x: 0, y: 0, width: 2, height: 2 },
+    config: { label: "Home Assistant", ... }
+  },
+  // Small quick action
+  {
+    type: TileType.BUTTON,
+    layout: { x: 2, y: 0, width: 1, height: 1 },
+    config: { label: "Restart", ... }
+  }
+]
+```
+
+### 4. Import Type Constants
+
+Always import `TileType` to prevent typos:
+
+```javascript
+import { TileType } from '../core/TileType.js';
+
+// Good
+type: TileType.APPLICATION
+
+// Bad - prone to typos and validation errors
+type: "application"
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Application Tile" icon="grid" href="/tiles/application">
+    Configure application launcher tiles
+  </Card>
+  <Card title="Link Tile" icon="link" href="/tiles/link">
+    Set up navigation links with status monitoring
+  </Card>
+  <Card title="Button Tile" icon="square" href="/tiles/button">
+    Create interactive HTTP request buttons
+  </Card>
+  <Card title="Toggle Tile" icon="toggle-on" href="/tiles/toggle">
+    Build stateful toggle switches
+  </Card>
+</CardGroup>

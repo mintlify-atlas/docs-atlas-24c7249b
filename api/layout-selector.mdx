@@ -1,0 +1,191 @@
+---
+title: selectLayout
+description: Select the appropriate layout based on URL overrides, media queries, and fallback logic
+---
+
+The `selectLayout` function implements a priority-based layout selection system. It evaluates URL parameters, media queries, and fallback configurations to determine which layout to activate.
+
+## Function Signature
+
+```javascript
+function selectLayout(layouts)
+```
+
+<ParamField path="layouts" type="array" required>
+  Array of layout configuration objects. Must be non-empty.
+  
+  <ParamField path="layouts[].name" type="string" required>
+    Unique identifier for the layout. Used for URL overrides.
+  </ParamField>
+  
+  <ParamField path="layouts[].mediaQuery" type="string">
+    CSS media query string (e.g., `"(max-width: 768px)"`). If omitted, the layout can serve as a fallback.
+  </ParamField>
+  
+  <ParamField path="layouts[].rows" type="number" required>
+    Number of grid rows for the layout
+  </ParamField>
+  
+  <ParamField path="layouts[].columns" type="number" required>
+    Number of grid columns for the layout
+  </ParamField>
+  
+  <ParamField path="layouts[].tiles" type="array" required>
+    Array of tile configurations for this layout
+  </ParamField>
+</ParamField>
+
+<ResponseField name="return" type="object">
+  Returns the selected layout object from the input array
+</ResponseField>
+
+## Selection Priority
+
+The function evaluates layouts in the following order:
+
+### 1. URL Override (Highest Priority)
+
+URL-based selection takes precedence over all other methods. Three URL patterns are supported:
+
+#### Pattern 1: Direct Path
+```
+https://example.com/mobile
+```
+Matches layout with `name: "mobile"`
+
+- Path must be exactly `/<layoutName>`
+- Ignores paths containing `.` (e.g., `/index.html`)
+- Ignores root path `/`
+
+#### Pattern 2: Layout Path
+```
+https://example.com/layout/desktop
+```
+Matches layout with `name: "desktop"`
+
+#### Pattern 3: Query Parameter
+```
+https://example.com?layout=tablet
+```
+Matches layout with `name: "tablet"`
+
+**Error handling:** If a URL override specifies a layout name that doesn't exist, throws an error:
+
+```javascript
+throw new Error(`Layout "${urlOverride}" not found (URL override)`);
+```
+
+### 2. Media Query Matching
+
+If no URL override is present, the function iterates through layouts in array order and tests each `mediaQuery`:
+
+```javascript
+window.matchMedia(layout.mediaQuery).matches
+```
+
+- Returns the **first** layout with a matching media query
+- Invalid media queries are logged as warnings and skipped
+- Layouts without a `mediaQuery` are skipped in this phase
+
+### 3. Fallback Layout
+
+If no media queries match, the function selects the **first layout without a `mediaQuery`**:
+
+```javascript
+const fallbackLayout = layouts.find(l => !l.mediaQuery);
+```
+
+### 4. No Layout Found
+
+If all three methods fail, throws an error:
+
+```javascript
+throw new Error('No layout could be resolved');
+```
+
+## Validation
+
+The function validates the input before processing:
+
+### Array Validation
+
+```javascript
+if (!Array.isArray(layouts) || layouts.length === 0) {
+  throw new Error('Layouts must be a non-empty array');
+}
+```
+
+### Unique Names Validation
+
+```javascript
+const names = layouts.map(l => l.name);
+const uniqueNames = new Set(names);
+if (names.length !== uniqueNames.size) {
+  throw new Error('Layout names must be unique');
+}
+```
+
+## Example Usage
+
+### Basic Responsive Layout Selection
+
+```javascript
+import { selectLayout } from './core/layoutSelector.js';
+
+const layouts = [
+  {
+    name: 'mobile',
+    mediaQuery: '(max-width: 768px)',
+    rows: 8,
+    columns: 2,
+    tiles: [/* ... */]
+  },
+  {
+    name: 'tablet',
+    mediaQuery: '(min-width: 769px) and (max-width: 1024px)',
+    rows: 6,
+    columns: 4,
+    tiles: [/* ... */]
+  },
+  {
+    name: 'desktop',
+    rows: 4,
+    columns: 6,
+    tiles: [/* ... */]
+  }
+];
+
+const selectedLayout = selectLayout(layouts);
+console.log(`Using layout: ${selectedLayout.name}`);
+```
+
+### URL Override Example
+
+```javascript
+// User visits: https://dashboard.example.com/mobile
+const selectedLayout = selectLayout(layouts);
+// Returns the 'mobile' layout regardless of screen size
+```
+
+### Testing Specific Layouts
+
+```javascript
+// Force a specific layout via query parameter:
+// https://dashboard.example.com?layout=tablet
+
+const selectedLayout = selectLayout(layouts);
+// Returns the 'tablet' layout
+```
+
+## Error Cases
+
+| Condition | Error Message |
+|-----------|---------------|
+| Empty array | `Layouts must be a non-empty array` |
+| Duplicate names | `Layout names must be unique` |
+| URL override not found | `Layout "<name>" not found (URL override)` |
+| No layout resolved | `No layout could be resolved` |
+
+## Source Reference
+
+**File:** `source/core/layoutSelector.js:1-77`

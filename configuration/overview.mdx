@@ -1,0 +1,206 @@
+---
+title: "Configuration Overview"
+description: "Understanding ZeroDash configuration structure and file organization"
+---
+
+## Configuration Structure
+
+ZeroDash uses a JavaScript-based configuration system located in the `user/` directory. The main configuration file exports a `dashboardConfig` object that defines all layouts and tiles for your dashboard.
+
+### Root Configuration Schema
+
+The root configuration object must contain a `layouts` array:
+
+```javascript user/config.js
+export const dashboardConfig = {
+  layouts: [
+    // Array of layout objects
+  ]
+};
+```
+
+<Info>
+The configuration is validated at runtime. Unknown keys will cause an error, ensuring your configuration is correct.
+</Info>
+
+### Validation Rules
+
+From `source/main.js:12-22`, the configuration validator enforces:
+
+- `dashboardConfig` must be an object
+- Only `layouts` key is allowed at the root level
+- `layouts` must be a non-empty array
+- Unknown keys will trigger an error
+
+```javascript
+if (!dashboardConfig || typeof dashboardConfig !== 'object') {
+  throw new Error('Dashboard config must be an object');
+}
+
+if (!Array.isArray(dashboardConfig.layouts)) {
+  throw new Error('Dashboard config must have a layouts array');
+}
+```
+
+## Configuration Files
+
+### Main Configuration
+
+**Location**: `user/config.js`
+
+This file exports your dashboard configuration:
+
+```javascript user/config.js
+import { TileType } from '../core/TileType.js';
+
+export const dashboardConfig = {
+  layouts: [
+    {
+      name: "desktop",
+      mediaQuery: "(min-width: 1024px)",
+      rows: 4,
+      columns: 6,
+      tiles: [
+        // Tile configurations
+      ]
+    },
+    {
+      name: "mobile",
+      mediaQuery: "(max-width: 1023px)",
+      rows: 8,
+      columns: 2,
+      tiles: [
+        // Tile configurations
+      ]
+    }
+  ]
+};
+```
+
+### Search Configuration
+
+**Location**: `user/searchConfig.js`
+
+Configures the global search functionality:
+
+```javascript user/searchConfig.js
+export const searchConfig = {
+  hotkey: '/',
+  placeholder: 'Search dashboard...',
+  // Search indexing options
+};
+```
+
+## Available Tile Types
+
+From `source/core/TileType.js:1-8`, ZeroDash supports six tile types:
+
+```javascript
+export const TileType = Object.freeze({
+  WIDGET: "widget",
+  WEBHOOK: "webhook",
+  BUTTON: "button",
+  TOGGLE: "toggle",
+  LINK: "link",
+  APPLICATION: "application"
+});
+```
+
+<CardGroup cols={2}>
+  <Card title="Application Tile" icon="grid" href="/tiles/application">
+    Launch applications with availability monitoring
+  </Card>
+  <Card title="Link Tile" icon="link" href="/tiles/link">
+    Navigate to URLs with status checking
+  </Card>
+  <Card title="Button Tile" icon="square" href="/tiles/button">
+    Trigger HTTP requests with visual feedback
+  </Card>
+  <Card title="Toggle Tile" icon="toggle-on" href="/tiles/toggle">
+    Switch states with API integration
+  </Card>
+  <Card title="Webhook Tile" icon="webhook" href="/tiles/webhook">
+    Display data from webhook endpoints
+  </Card>
+  <Card title="Widget Tile" icon="window" href="/tiles/widget">
+    Embed external content via iframe
+  </Card>
+</CardGroup>
+
+## Configuration Best Practices
+
+### 1. Use Unique Layout Names
+
+From `source/core/layoutSelector.js:6-11`, layout names must be unique:
+
+```javascript
+const names = layouts.map(l => l.name);
+const uniqueNames = new Set(names);
+if (names.length !== uniqueNames.size) {
+  throw new Error('Layout names must be unique');
+}
+```
+
+### 2. Define a Fallback Layout
+
+Always include at least one layout without a `mediaQuery` as a fallback:
+
+```javascript
+{
+  name: "default",
+  // No mediaQuery - serves as fallback
+  rows: 4,
+  columns: 4,
+  tiles: []
+}
+```
+
+### 3. Import Tile Types
+
+Always import and use the `TileType` constants to avoid typos:
+
+```javascript
+import { TileType } from '../core/TileType.js';
+
+// Correct
+type: TileType.APPLICATION
+
+// Incorrect - will cause validation error
+type: "app"  // Unknown tile type
+```
+
+### 4. Validate Configuration Locally
+
+Run ZeroDash locally and check the browser console for validation errors. The system provides detailed error messages for configuration issues.
+
+## Error Handling
+
+ZeroDash includes comprehensive validation at multiple levels:
+
+1. **Root level validation** - Checks overall config structure
+2. **Layout validation** - Validates each layout object  
+3. **Tile validation** - Validates tile structure and positioning
+4. **Type-specific validation** - Each tile type has its own config requirements
+
+If configuration errors are detected, ZeroDash displays an error message in the dashboard container:
+
+```javascript source/main.js:85-90
+catch (error) {
+  console.error('Fatal error initializing dashboard:', error);
+  const container = document.getElementById('dashboard');
+  if (container) {
+    container.innerHTML = `<div style="padding: 20px; color: red; font-size: 1.2em;">Fatal Error: ${error.message}</div>`;
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Layout Configuration" icon="grid" href="/configuration/layouts">
+    Learn how to configure layouts and responsive designs
+  </Card>
+  <Card title="Tile Configuration" icon="square" href="/configuration/tiles">
+    Understand tile positioning and common properties
+  </Card>
+</CardGroup>

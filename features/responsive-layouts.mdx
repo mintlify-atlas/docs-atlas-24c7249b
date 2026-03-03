@@ -1,0 +1,470 @@
+---
+title: "Responsive Layout Selection"
+description: "Automatic layout switching based on screen size, URL overrides, and media queries"
+---
+
+ZeroDash supports multiple layouts in a single configuration file, with intelligent selection based on media queries and URL parameters.
+
+## Selection Priority
+
+Layouts are selected using this **priority order**:
+
+1. **URL Override** (highest priority)
+2. **Media Query Matching**
+3. **Fallback Layout**
+4. **Error** (if no layout can be resolved)
+
+```javascript
+// From source/core/layoutSelector.js:1-45
+export function selectLayout(layouts) {
+  // 1. Check URL override (HIGHEST PRIORITY)
+  const urlOverride = getUrlOverride();
+  if (urlOverride) {
+    return layouts.find(l => l.name === urlOverride);
+  }
+
+  // 2. Media query matching
+  for (const layout of layouts) {
+    if (layout.mediaQuery && window.matchMedia(layout.mediaQuery).matches) {
+      return layout;
+    }
+  }
+
+  // 3. Fallback - first layout without mediaQuery
+  return layouts.find(l => !l.mediaQuery);
+}
+```
+
+## URL Override Methods
+
+You can force a specific layout using URL patterns:
+
+### Method 1: Direct Path (Highest Priority)
+
+```
+https://dashboard.local/mobile
+https://dashboard.local/desktop
+https://dashboard.local/tv
+```
+
+Pattern: `/<layoutName>`
+
+```javascript
+// From source/core/layoutSelector.js:52-60
+if (pathname !== '/' && pathname.length > 1) {
+  const directMatch = pathname.match(/^\/([^\/]+)$/);
+  if (directMatch) {
+    const layoutName = decodeURIComponent(directMatch[1]);
+    if (layoutName && !layoutName.includes('.')) {
+      return layoutName;
+    }
+  }
+}
+```
+
+**Note**: Paths like `/index.html` are ignored (anything with a `.` is treated as a file, not a layout name).
+
+### Method 2: Layout Path
+
+```
+https://dashboard.local/layout/mobile
+https://dashboard.local/layout/desktop
+```
+
+Pattern: `/layout/<layoutName>`
+
+```javascript
+// From source/core/layoutSelector.js:63-66
+const pathMatch = pathname.match(/\/layout\/([^\/]+)/);
+if (pathMatch) {
+  return decodeURIComponent(pathMatch[1]);
+}
+```
+
+### Method 3: Query Parameter
+
+```
+https://dashboard.local?layout=mobile
+https://dashboard.local/index.html?layout=tv
+```
+
+Pattern: `?layout=<layoutName>`
+
+```javascript
+// From source/core/layoutSelector.js:69-73
+const params = new URLSearchParams(window.location.search);
+const layoutParam = params.get('layout');
+if (layoutParam) {
+  return decodeURIComponent(layoutParam);
+}
+```
+
+## Media Query Matching
+
+If no URL override is present, ZeroDash iterates through layouts **in order** and selects the first one whose `mediaQuery` matches:
+
+```javascript
+// From source/core/layoutSelector.js:24-35
+for (const layout of layouts) {
+  if (layout.mediaQuery) {
+    try {
+      if (window.matchMedia(layout.mediaQuery).matches) {
+        return layout;
+      }
+    } catch (error) {
+      console.warn(`Invalid media query for layout "${layout.name}"`);
+      // Continue to next layout
+    }
+  }
+}
+```
+
+### Example Configuration
+
+```json
+{
+  "layouts": [
+    {
+      "name": "mobile",
+      "mediaQuery": "(max-width: 768px)",
+      "rows": 6,
+      "columns": 2,
+      "tiles": [ /* ... */ ]
+    },
+    {
+      "name": "tablet",
+      "mediaQuery": "(min-width: 769px) and (max-width: 1024px)",
+      "rows": 4,
+      "columns": 4,
+      "tiles": [ /* ... */ ]
+    },
+    {
+      "name": "desktop",
+      "rows": 3,
+      "columns": 6,
+      "tiles": [ /* ... */ ]
+    }
+  ]
+}
+```
+
+**Selection behavior**:
+- Screen ≤ 768px: `mobile` layout
+- Screen 769-1024px: `tablet` layout
+- Screen > 1024px: `desktop` layout (fallback, no media query)
+
+## Fallback Layout
+
+The **first layout without a `mediaQuery`** property is used as the fallback:
+
+```javascript
+// From source/core/layoutSelector.js:37-41
+const fallbackLayout = layouts.find(l => !l.mediaQuery);
+if (fallbackLayout) {
+  return fallbackLayout;
+}
+```
+
+### Recommended Pattern
+
+```json
+{
+  "layouts": [
+    {
+      "name": "mobile",
+      "mediaQuery": "(max-width: 640px)",
+      "tiles": [ /* mobile-specific tiles */ ]
+    },
+    {
+      "name": "desktop",
+      // No mediaQuery - this is the fallback
+      "tiles": [ /* default tiles */ ]
+    }
+  ]
+}
+```
+
+This ensures:
+- Mobile devices get the optimized mobile layout
+- Everything else gets the desktop layout
+- No screen size is left without a layout
+
+## Validation Rules
+
+### Unique Layout Names
+
+All layouts must have unique names:
+
+```javascript
+// From source/core/layoutSelector.js:6-11
+const names = layouts.map(l => l.name);
+const uniqueNames = new Set(names);
+if (names.length !== uniqueNames.size) {
+  throw new Error('Layout names must be unique');
+}
+```
+
+**Invalid**:
+```json
+{
+  "layouts": [
+    { "name": "default", "tiles": [] },
+    { "name": "default", "tiles": [] }  // ERROR: Duplicate name
+  ]
+}
+```
+
+### Non-Empty Array
+
+```javascript
+// From source/core/layoutSelector.js:2-4
+if (!Array.isArray(layouts) || layouts.length === 0) {
+  throw new Error('Layouts must be a non-empty array');
+}
+```
+
+### Layout Not Found
+
+When a URL override specifies a non-existent layout:
+
+```javascript
+// From source/core/layoutSelector.js:16-19
+if (!layout) {
+  throw new Error(`Layout "${urlOverride}" not found (URL override)`);
+}
+```
+
+**Example**: Navigating to `/nonexistent` will throw an error if there's no layout named `"nonexistent"`.
+
+## Media Query Reference
+
+### Common Breakpoints
+
+```css
+/* Mobile phones */
+"(max-width: 640px)"
+
+/* Tablets */
+"(min-width: 641px) and (max-width: 1024px)"
+
+/* Desktop */
+"(min-width: 1025px)"
+
+/* Portrait orientation */
+"(orientation: portrait)"
+
+/* Landscape orientation */
+"(orientation: landscape)"
+
+/* High DPI screens */
+"(min-resolution: 2dppx)"
+
+/* Dark mode preference */
+"(prefers-color-scheme: dark)"
+```
+
+### Advanced Examples
+
+```json
+{
+  "layouts": [
+    {
+      "name": "phone-portrait",
+      "mediaQuery": "(max-width: 640px) and (orientation: portrait)"
+    },
+    {
+      "name": "phone-landscape",
+      "mediaQuery": "(max-width: 640px) and (orientation: landscape)"
+    },
+    {
+      "name": "tablet",
+      "mediaQuery": "(min-width: 641px) and (max-width: 1024px)"
+    },
+    {
+      "name": "desktop"
+      // Fallback for anything else
+    }
+  ]
+}
+```
+
+## Invalid Media Queries
+
+If a media query is malformed, ZeroDash logs a warning and continues to the next layout:
+
+```javascript
+// From source/core/layoutSelector.js:28-32
+try {
+  if (window.matchMedia(layout.mediaQuery).matches) {
+    return layout;
+  }
+} catch (error) {
+  console.warn(`Invalid media query for layout "${layout.name}": ${layout.mediaQuery}`, error);
+}
+```
+
+**Example**:
+```json
+{
+  "name": "broken",
+  "mediaQuery": "(invalid-syntax"
+}
+```
+
+Console output:
+```
+Invalid media query for layout "broken": (invalid-syntax
+```
+
+The layout is skipped and selection continues.
+
+## Dynamic Layout Switching
+
+**Important**: ZeroDash does **not** automatically switch layouts when the browser window is resized. The layout is selected **once** when the page loads.
+
+To switch layouts dynamically:
+
+1. **Reload the page** after resizing
+2. **Navigate to a URL override** for a specific layout
+3. **Implement custom JavaScript** to listen for `window.matchMedia()` changes and reload
+
+### Custom Dynamic Switching
+
+```javascript
+// Add to your custom JavaScript
+const mobileQuery = window.matchMedia('(max-width: 768px)');
+
+mobileQuery.addEventListener('change', (e) => {
+  if (e.matches) {
+    // Switched to mobile - reload to mobile layout
+    window.location.href = '/mobile';
+  } else {
+    // Switched to desktop - reload to desktop layout
+    window.location.href = '/desktop';
+  }
+});
+```
+
+## Use Cases
+
+### Use Case 1: Mobile-First Dashboard
+
+```json
+{
+  "layouts": [
+    {
+      "name": "mobile",
+      "mediaQuery": "(max-width: 768px)",
+      "rows": 8,
+      "columns": 2,
+      "tiles": [
+        /* Essential apps only, large tiles */
+      ]
+    },
+    {
+      "name": "desktop",
+      "rows": 4,
+      "columns": 6,
+      "tiles": [
+        /* All apps, smaller tiles */
+      ]
+    }
+  ]
+}
+```
+
+### Use Case 2: TV Dashboard
+
+```json
+{
+  "layouts": [
+    {
+      "name": "tv",
+      "rows": 3,
+      "columns": 4,
+      "tiles": [
+        /* Large tiles, minimal text, high contrast */
+      ]
+    },
+    {
+      "name": "desktop"
+      /* Default layout */
+    }
+  ]
+}
+```
+
+Access TV layout with: `https://dashboard.local/tv`
+
+### Use Case 3: Orientation-Specific Layouts
+
+```json
+{
+  "layouts": [
+    {
+      "name": "portrait",
+      "mediaQuery": "(orientation: portrait)",
+      "rows": 8,
+      "columns": 2
+    },
+    {
+      "name": "landscape",
+      "mediaQuery": "(orientation: landscape)",
+      "rows": 3,
+      "columns": 6
+    }
+  ]
+}
+```
+
+### Use Case 4: QR Code Links
+
+Generate QR codes for specific layouts:
+
+```
+Mobile Layout: https://dashboard.local/mobile
+Tablet Layout: https://dashboard.local/tablet
+Desktop Layout: https://dashboard.local/desktop
+```
+
+Users can scan the appropriate QR code to get their device-optimized layout.
+
+## Error Handling
+
+### No Layout Resolved
+
+```javascript
+// From source/core/layoutSelector.js:43-45
+throw new Error('No layout could be resolved');
+```
+
+This happens when:
+- All layouts have media queries that don't match
+- No fallback layout exists (all layouts have `mediaQuery` defined)
+
+**Solution**: Always include at least one layout without a `mediaQuery` as the fallback.
+
+### URL Override Not Found
+
+```javascript
+// From source/core/layoutSelector.js:16-19
+if (!layout) {
+  throw new Error(`Layout "${urlOverride}" not found (URL override)`);
+}
+```
+
+Navigating to `/invalid-layout` when no layout named `"invalid-layout"` exists will throw this error.
+
+**Solution**: Validate layout names in URLs or handle the error in your application code.
+
+## Technical Reference
+
+**Source file**: `source/core/layoutSelector.js:1-79`
+
+**Main function**: `selectLayout(layouts)`
+
+**Helper function**: `getUrlOverride()`
+
+**Returns**: A single layout object from the `layouts` array
+
+**Throws**: `Error` if no valid layout can be selected
